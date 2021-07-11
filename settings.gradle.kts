@@ -1,2 +1,1 @@
-rootProject.name = "ExampleExtension"
-
+rootProject.name = "BlockSumo"

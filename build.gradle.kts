@@ -25,6 +25,7 @@ repositories {
     maven(url = "https://repo.spongepowered.org/maven")
     maven(url = "https://repo.minestom.com/repository/maven-public/")
     maven(url = "https://repo.velocitypowered.com/snapshots/")
+    maven(url = "https://repo.repsy.io/mvn/sejtam10/minestom")
 }
 
 dependencies {
@@ -41,6 +42,10 @@ dependencies {
     compileOnly("com.github.Minestom:Minestom:b9864a1a28")
 
     compileOnly("com.github.Project-Cepi:KStom:0ecbf01293")
+
+    compileOnly("dev.sejtam:MineSchem-Core:3.0.0")
+
+    implementation("net.kyori:adventure-text-minimessage:4.1.0-SNAPSHOT")
 
     // import kotlinx serialization
     compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.2.2")

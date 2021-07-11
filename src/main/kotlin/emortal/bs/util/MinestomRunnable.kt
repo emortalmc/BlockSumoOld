@@ -1,4 +1,4 @@
-package emortal.kingpin.util
+package emortal.bs.util
 
 import net.minestom.server.MinecraftServer
 import net.minestom.server.timer.Task

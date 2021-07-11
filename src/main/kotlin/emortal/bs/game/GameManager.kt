@@ -1,4 +1,4 @@
-package emortal.kingpin.game
+package emortal.bs.game
 
 import net.minestom.server.entity.Player
 import java.util.concurrent.ConcurrentHashMap
@@ -12,9 +12,7 @@ object GameManager {
      * Adds a player to the game queue
      * @param player The player to add to the game queue
      */
-    fun addPlayer(player: Player): Game {
-        val game: Game = nextGame()
-
+    fun addPlayer(player: Player, game: Game = nextGame()): Game {
         game.addPlayer(player)
         gameMap[player] = game
 
@@ -27,7 +25,7 @@ object GameManager {
         gameMap.remove(player)
     }
 
-    fun createGame(options: GameOptions): Game {
+    fun createGame(options: GameOptions = GameOptions()): Game {
         val newGame = Game(gameIndex, options)
         games.add(newGame)
         gameIndex++
@@ -43,12 +41,8 @@ object GameManager {
 
 
     fun nextGame(): Game {
-        for (game in games) {
-            if (game.gameState != GameState.WAITING_FOR_PLAYERS) continue
-
-            return game
-        }
-        return createGame(GameOptions())
+        return games.firstOrNull { it.gameState == GameState.WAITING_FOR_PLAYERS }
+            ?: createGame()
     }
 
     operator fun get(player: Player) = gameMap[player]

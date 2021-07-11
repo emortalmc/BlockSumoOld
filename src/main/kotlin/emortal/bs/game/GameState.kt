@@ -1,4 +1,4 @@
-package emortal.kingpin.game
+package emortal.bs.game
 
 enum class GameState {
     /** When the game is waiting for players to join */

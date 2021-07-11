@@ -1,22 +1,25 @@
-package emortal.kingpin.game
+package emortal.bs.game
 
-import emortal.kingpin.map.MapManager
-import emortal.kingpin.util.MinestomRunnable
+import emortal.bs.item.Powerup
+import emortal.bs.map.MapManager
+import emortal.bs.util.MinestomRunnable
 import net.kyori.adventure.audience.Audience
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
+import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.title.Title
+import net.minestom.server.entity.Entity
+import net.minestom.server.entity.EntityType
 import net.minestom.server.entity.GameMode
 import net.minestom.server.entity.Player
-import net.minestom.server.instance.Instance
+import net.minestom.server.entity.metadata.item.ItemEntityMeta
 import net.minestom.server.instance.block.Block
 import net.minestom.server.item.ItemStack
 import net.minestom.server.item.Material
 import net.minestom.server.scoreboard.Sidebar
 import net.minestom.server.sound.SoundEvent
-import net.minestom.server.tag.Tag
 import net.minestom.server.timer.Task
 import net.minestom.server.utils.BlockPosition
 import net.minestom.server.utils.Position
@@ -27,6 +30,7 @@ import world.cepi.kstom.adventure.sendMiniMessage
 import world.cepi.kstom.util.component1
 import world.cepi.kstom.util.component2
 import world.cepi.kstom.util.component3
+import world.cepi.kstom.util.playSound
 import java.time.Duration
 import java.util.concurrent.ThreadLocalRandom
 import kotlin.math.cos
@@ -34,26 +38,25 @@ import kotlin.math.sin
 import kotlin.properties.Delegates
 
 class Game(val id: Int, val options: GameOptions) {
-    val instance: Instance = MapManager.mapMap[options.map]!!
+    companion object {
+        val mini = MiniMessage.get()
+    }
 
-    // TODO: Probably replace with MapManager.getWidth or smth
-    val gameWidth = 15
-
-    // TODO: Probably replace with MapManager.getMid or smth
-    val spawnPos: Position = Position(0.5, 60.0, 0.5)
+    val spawnPos: Position = Position(0.5, 230.0, 0.5)
 
     val players: MutableSet<Player> = HashSet()
+
+    val instance = MapManager.mapMap["forest"]!!
 
     val playerAudience: Audience = Audience.audience(players)
     var gameState: GameState = GameState.WAITING_FOR_PLAYERS
 
-    private var startingTask: Task? = null
-
-    val scoreboard: Sidebar = Sidebar("<gradient:light_purple:aqua><bold>Kingpin".asMini())
-
-    val respawnTasks: MutableList<Task> = mutableListOf()
-
     var startTime by Delegates.notNull<Long>()
+    val scoreboard: Sidebar = Sidebar(mini.parse("<gradient:light_purple:aqua><bold>Kingpin"))
+
+    private var startingTask: Task? = null
+    val respawnTasks: MutableList<Task> = mutableListOf()
+    var itemLoopTask: Task? = null
 
     init {
         scoreboard.createLine(Sidebar.ScoreboardLine("header", Component.empty(), 30))
@@ -76,8 +79,6 @@ class Game(val id: Int, val options: GameOptions) {
             return
         }
 
-        player.isAutoViewable = false
-
         scoreboard.createLine(Sidebar.ScoreboardLine(
             player.uuid.toString(),
 
@@ -90,9 +91,11 @@ class Game(val id: Int, val options: GameOptions) {
             0
         ))
 
+        players.add(player)
+        scoreboard.addViewer(player)
+
         playerAudience.sendMiniMessage(" <gray>[<green><bold>+</bold></green>]</gray> ${player.username} <green>joined</green>")
 
-        player.setTag(Tag.Integer("kills"), 0)
         player.respawnPoint = getRandomRespawnPosition()
         player.gameMode = GameMode.SPECTATOR
 
@@ -142,9 +145,20 @@ class Game(val id: Int, val options: GameOptions) {
 
     fun start() {
 
-        // TODO: Start powerup spawn loop
         // TODO: TNT Rain(?)
         // TODO: Sky border
+
+        itemLoopTask = Manager.scheduler.buildTask {
+            val itemEntity = Entity(EntityType.ITEM)
+            val itemEntityMeta = itemEntity.entityMeta as ItemEntityMeta
+            val powerup = Powerup.powerups.random().item
+
+            itemEntityMeta.item = powerup
+            itemEntityMeta.customName = powerup.displayName
+            itemEntityMeta.isCustomNameVisible = true
+
+            itemEntity.setInstance(instance, spawnPos.clone().add(0.0, 1.0, 0.0))
+        }.repeat(Duration.ofSeconds(25)).schedule()
 
         startTime = System.currentTimeMillis()
 
@@ -156,8 +170,17 @@ class Game(val id: Int, val options: GameOptions) {
     }
 
     fun death(player: Player, killer: Player?) {
+        player.closeInventory()
+        player.playSound(Sound.sound(SoundEvent.VILLAGER_DEATH, Sound.Source.PLAYER, 0.5f, 1.5f), player.position)
+        player.gameMode = GameMode.SPECTATOR
+        player.inventory.clear()
+
+        val kingpinPlayer = player.kingpin
+        kingpinPlayer.lives--
 
         if (killer != null) {
+            val kingpinKiller = killer.kingpin
+            kingpinKiller.kills++
 
             playerAudience.sendMiniMessage(" <red>☠</red> <dark_gray>|</dark_gray> <gray><red>${player.username}</red> was killed by <white>${killer.username}</white>")
 
@@ -183,6 +206,10 @@ class Game(val id: Int, val options: GameOptions) {
 
         }
 
+        if (kingpinPlayer.lives <= 0) {
+            kingpinPlayer.dead = true
+            return
+        }
 
         respawnTasks.add(object : MinestomRunnable() {
             var i = 3
@@ -221,7 +248,7 @@ class Game(val id: Int, val options: GameOptions) {
         teleport(getRandomRespawnPosition())
         stopSpectating()
         isInvisible = false
-        gameMode = GameMode.ADVENTURE
+        gameMode = GameMode.SURVIVAL
         setNoGravity(false)
         clearEffects()
 
@@ -234,8 +261,8 @@ class Game(val id: Int, val options: GameOptions) {
 
     private fun getRandomRespawnPosition(): Position {
         val angle: Double = ThreadLocalRandom.current().nextDouble() * 360
-        val x = cos(angle) * (gameWidth - 2)
-        val z = sin(angle) * (gameWidth - 2)
+        val x = cos(angle) * (15 - 2)
+        val z = sin(angle) * (15 - 2)
 
         val pos: Position = spawnPos.clone().add(x, -2.0, z)
         val blockPos: BlockPosition = pos.toBlockPosition()
