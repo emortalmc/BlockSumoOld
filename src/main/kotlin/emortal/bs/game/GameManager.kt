@@ -6,7 +6,6 @@ import java.util.concurrent.ConcurrentHashMap
 object GameManager {
     private val gameMap: ConcurrentHashMap<Player, Game> = ConcurrentHashMap<Player, Game>()
     private val games: MutableSet<Game> = HashSet()
-    private var gameIndex = 0
 
     /**
      * Adds a player to the game queue
@@ -26,22 +25,21 @@ object GameManager {
     }
 
     fun createGame(options: GameOptions = GameOptions()): Game {
-        val newGame = Game(gameIndex, options)
+        val newGame = Game(options)
         games.add(newGame)
-        gameIndex++
         return newGame
     }
 
     fun deleteGame(game: Game) {
-        game.players.forEach(gameMap::remove)
+        game.players.forEach {
+            gameMap.remove(it)
+            BlockSumoPlayer.removeFrom(it)
+        }
         games.remove(game)
-
-        gameIndex--
     }
 
-
     fun nextGame(): Game {
-        return games.firstOrNull { it.gameState == GameState.WAITING_FOR_PLAYERS }
+        return games.firstOrNull { it.gameState == GameState.WAITING_FOR_PLAYERS || it.gameState == GameState.STARTING }
             ?: createGame()
     }
 

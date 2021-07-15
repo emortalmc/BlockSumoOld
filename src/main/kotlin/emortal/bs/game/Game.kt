@@ -1,62 +1,66 @@
 package emortal.bs.game
 
 import emortal.bs.item.Powerup
+import emortal.bs.item.SpawnType
 import emortal.bs.map.MapManager
+import emortal.bs.util.FireworkUtil
 import emortal.bs.util.MinestomRunnable
 import net.kyori.adventure.audience.Audience
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
+import net.kyori.adventure.text.format.TextColor
+import net.kyori.adventure.text.format.TextColor.lerp
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.title.Title
+import net.kyori.adventure.util.RGBLike
+import net.minestom.server.color.Color
+import net.minestom.server.coordinate.Pos
+import net.minestom.server.coordinate.Vec
 import net.minestom.server.entity.Entity
-import net.minestom.server.entity.EntityType
 import net.minestom.server.entity.GameMode
+import net.minestom.server.entity.ItemEntity
 import net.minestom.server.entity.Player
-import net.minestom.server.entity.metadata.item.ItemEntityMeta
 import net.minestom.server.instance.block.Block
 import net.minestom.server.item.ItemStack
 import net.minestom.server.item.Material
+import net.minestom.server.item.firework.FireworkEffect
+import net.minestom.server.item.firework.FireworkEffectType
 import net.minestom.server.scoreboard.Sidebar
 import net.minestom.server.sound.SoundEvent
 import net.minestom.server.timer.Task
-import net.minestom.server.utils.BlockPosition
-import net.minestom.server.utils.Position
-import net.minestom.server.utils.Vector
 import world.cepi.kstom.Manager
-import world.cepi.kstom.adventure.asMini
 import world.cepi.kstom.adventure.sendMiniMessage
-import world.cepi.kstom.util.component1
-import world.cepi.kstom.util.component2
-import world.cepi.kstom.util.component3
-import world.cepi.kstom.util.playSound
 import java.time.Duration
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ThreadLocalRandom
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.properties.Delegates
 
-class Game(val id: Int, val options: GameOptions) {
+class Game(val options: GameOptions) {
     companion object {
         val mini = MiniMessage.get()
     }
 
-    val spawnPos: Position = Position(0.5, 230.0, 0.5)
+    val spawnPos: Pos = Pos(0.5, 230.0, 0.5)
 
-    val players: MutableSet<Player> = HashSet()
+    val players = ConcurrentHashMap.newKeySet<Player>()
 
-    val instance = MapManager.mapMap["forest"]!!
+    val instance = MapManager.get()
 
     val playerAudience: Audience = Audience.audience(players)
     var gameState: GameState = GameState.WAITING_FOR_PLAYERS
 
     var startTime by Delegates.notNull<Long>()
-    val scoreboard: Sidebar = Sidebar(mini.parse("<gradient:light_purple:aqua><bold>Kingpin"))
+    var scoreboard: Sidebar = Sidebar(mini.parse("<gradient:light_purple:aqua><bold>BlockSumo"))
+
 
     private var startingTask: Task? = null
     val respawnTasks: MutableList<Task> = mutableListOf()
     var itemLoopTask: Task? = null
+    var invItemLoopTask: Task? = null
 
     init {
         scoreboard.createLine(Sidebar.ScoreboardLine("header", Component.empty(), 30))
@@ -73,8 +77,32 @@ class Game(val id: Int, val options: GameOptions) {
         )
     }
 
+    fun updateScoreboard(player: Player) {
+
+        val livesColor: RGBLike
+
+        val startingColor = NamedTextColor.GREEN
+        val endingColor = NamedTextColor.RED
+
+        if (player.blocksumo.lives > 5) livesColor = NamedTextColor.LIGHT_PURPLE
+        else {
+            livesColor = lerp(player.blocksumo.lives / 5f, endingColor, startingColor)
+        }
+
+        scoreboard.updateLineContent(
+            player.uuid.toString(),
+
+            Component.text()
+                .append(Component.text(player.username, NamedTextColor.GRAY))
+                .append(Component.text(" - ", NamedTextColor.DARK_GRAY))
+                .append(Component.text(player.blocksumo.lives, TextColor.color(livesColor), TextDecoration.BOLD))
+                .build(),
+        )
+        scoreboard.updateLineScore(player.uuid.toString(), player.blocksumo.lives)
+    }
+
     fun addPlayer(player: Player) {
-        if (gameState != GameState.WAITING_FOR_PLAYERS) {
+        if (gameState != GameState.WAITING_FOR_PLAYERS && gameState != GameState.STARTING) {
             println("Player was added to an ongoing game")
             return
         }
@@ -85,18 +113,19 @@ class Game(val id: Int, val options: GameOptions) {
             Component.text()
                 .append(Component.text(player.username, NamedTextColor.GRAY))
                 .append(Component.text(" - ", NamedTextColor.DARK_GRAY))
-                .append(Component.text(0, NamedTextColor.LIGHT_PURPLE, TextDecoration.BOLD))
+                .append(Component.text(5, NamedTextColor.GREEN, TextDecoration.BOLD))
                 .build(),
 
-            0
+            5
         ))
 
+        player.setCanPickupItem(true)
         players.add(player)
         scoreboard.addViewer(player)
 
         playerAudience.sendMiniMessage(" <gray>[<green><bold>+</bold></green>]</gray> ${player.username} <green>joined</green>")
 
-        player.respawnPoint = getRandomRespawnPosition()
+        player.respawnPoint = spawnPos
         player.gameMode = GameMode.SPECTATOR
 
         if (player.instance!! != instance) player.setInstance(instance)
@@ -112,7 +141,7 @@ class Game(val id: Int, val options: GameOptions) {
             gameState = GameState.STARTING
 
             startingTask = object : MinestomRunnable() {
-                var secs = 5
+                var secs = 15
 
                 override fun run() {
                     if (secs < 1) {
@@ -121,7 +150,7 @@ class Game(val id: Int, val options: GameOptions) {
                         return
                     }
 
-                    playerAudience.playSound(Sound.sound(SoundEvent.WOODEN_BUTTON_CLICK_ON, Sound.Source.BLOCK, 1f, 1f))
+                    playerAudience.playSound(Sound.sound(SoundEvent.BLOCK_WOODEN_BUTTON_CLICK_ON, Sound.Source.BLOCK, 1f, 1f))
                     playerAudience.showTitle(
                         Title.title(
                             Component.text(secs, NamedTextColor.GREEN, TextDecoration.BOLD),
@@ -140,25 +169,85 @@ class Game(val id: Int, val options: GameOptions) {
 
     fun removePlayer(player: Player) {
         players.remove(player)
+        scoreboard.removeViewer(player)
+        scoreboard.removeLine(player.uuid.toString())
+        BlockSumoPlayer.removeFrom(player)
 
+        if (players.size == 0) destroy()
+
+        if (gameState == GameState.WAITING_FOR_PLAYERS) return
+
+        if (players.size == 1) {
+            if (gameState == GameState.STARTING) {
+                gameState = GameState.WAITING_FOR_PLAYERS
+                startingTask?.cancel()
+                startingTask = null
+                return
+            }
+
+            victory(players.first())
+        }
     }
 
     fun start() {
-
         // TODO: TNT Rain(?)
         // TODO: Sky border
 
         itemLoopTask = Manager.scheduler.buildTask {
-            val itemEntity = Entity(EntityType.ITEM)
-            val itemEntityMeta = itemEntity.entityMeta as ItemEntityMeta
-            val powerup = Powerup.powerups.random().item
+            val powerup = Powerup.random(SpawnType.MIDDLE)
+            val itemEntity = ItemEntity(powerup.item)
+            val itemEntityMeta = itemEntity.entityMeta
 
-            itemEntityMeta.item = powerup
-            itemEntityMeta.customName = powerup.displayName
+            itemEntityMeta.item = powerup.item
+            itemEntityMeta.customName = powerup.item.displayName
             itemEntityMeta.isCustomNameVisible = true
 
-            itemEntity.setInstance(instance, spawnPos.clone().add(0.0, 1.0, 0.0))
-        }.repeat(Duration.ofSeconds(25)).schedule()
+            itemEntity.setInstance(instance, spawnPos.add(0.0, 1.0, 0.0))
+
+            playerAudience.sendMessage(
+                Component.text()
+                    .append(Component.text(" ★ ", NamedTextColor.GREEN))
+                    .append(Component.text("| ", NamedTextColor.DARK_GRAY))
+                    .append(powerup.name)
+                    .append(Component.text(" has spawned at middle!", NamedTextColor.GRAY))
+                    .build()
+            )
+
+            FireworkUtil.explode(instance, spawnPos.add(0.0, 1.0, 0.0), mutableListOf(
+                    FireworkEffect(false,
+                        false,
+                        FireworkEffectType.SMALL_BALL,
+                        mutableListOf(Color(255,100,0)),
+                        mutableListOf(Color(255,0,255))
+                    )
+                )
+            )
+        }
+            .delay(Duration.ofSeconds(5))
+            .repeat(Duration.ofSeconds(30))
+            .schedule()
+
+        invItemLoopTask = Manager.scheduler.buildTask {
+            val powerup = Powerup.random(SpawnType.EVERYWHERE)
+
+            players.forEach {
+                it.inventory.addItemStack(powerup.item)
+            }
+
+            playerAudience.sendMessage(
+                Component.text()
+                    .append(Component.text(" ★ ", NamedTextColor.GREEN))
+                    .append(Component.text("| ", NamedTextColor.DARK_GRAY))
+                    .append(powerup.name)
+                    .append(Component.text(" has been given to everyone!", NamedTextColor.GRAY))
+                    .build()
+            )
+
+            playerAudience.playSound(Sound.sound(SoundEvent.ENTITY_ITEM_PICKUP, Sound.Source.PLAYER, 1f, 1f))
+        }
+            .delay(Duration.ofSeconds(5))
+            .repeat(Duration.ofSeconds(50))
+            .schedule()
 
         startTime = System.currentTimeMillis()
 
@@ -171,16 +260,20 @@ class Game(val id: Int, val options: GameOptions) {
 
     fun death(player: Player, killer: Player?) {
         player.closeInventory()
-        player.playSound(Sound.sound(SoundEvent.VILLAGER_DEATH, Sound.Source.PLAYER, 0.5f, 1.5f), player.position)
+        player.playSound(Sound.sound(SoundEvent.ENTITY_VILLAGER_DEATH, Sound.Source.PLAYER, 1f, 1f))
+        player.setCanPickupItem(false)
         player.gameMode = GameMode.SPECTATOR
         player.inventory.clear()
+        player.isInvisible = true
+        player.velocity = Vec(0.0, 0.0, 0.0)
 
-        val kingpinPlayer = player.kingpin
+        val kingpinPlayer = player.blocksumo
         kingpinPlayer.lives--
 
         if (killer != null) {
-            val kingpinKiller = killer.kingpin
+            val kingpinKiller = killer.blocksumo
             kingpinKiller.kills++
+            updateScoreboard(killer)
 
             playerAudience.sendMiniMessage(" <red>☠</red> <dark_gray>|</dark_gray> <gray><red>${player.username}</red> was killed by <white>${killer.username}</white>")
 
@@ -208,15 +301,23 @@ class Game(val id: Int, val options: GameOptions) {
 
         if (kingpinPlayer.lives <= 0) {
             kingpinPlayer.dead = true
+
+            scoreboard.removeLine(player.uuid.toString())
+
+            val alivePlayers = players.filter { !it.blocksumo.dead }
+            if (alivePlayers.size == 1) victory(alivePlayers[0])
+
             return
         }
+
+        updateScoreboard(player)
 
         respawnTasks.add(object : MinestomRunnable() {
             var i = 3
 
             override fun run() {
                 if (i == 3) {
-                    player.velocity = Vector(0.0, 0.0, 0.0)
+                    player.velocity = Vec(0.0, 0.0, 0.0)
                     if (killer != null && !killer.isDead && killer != player) player.spectate(killer)
                 }
                 if (i <= 0) {
@@ -226,8 +327,8 @@ class Game(val id: Int, val options: GameOptions) {
                     return
                 }
 
-                val (x, y, z) = killer?.position ?: player.position
-                player.playSound(Sound.sound(SoundEvent.WOODEN_BUTTON_CLICK_ON, Sound.Source.BLOCK, 1f, 1f), x, y, z)
+                val pos = killer?.position ?: player.position
+                player.playSound(Sound.sound(SoundEvent.BLOCK_WOODEN_BUTTON_CLICK_ON, Sound.Source.BLOCK, 1f, 1f), pos.x(), pos.y(), pos.z())
                 player.showTitle(Title.title(
                     Component.text(i, NamedTextColor.GOLD, TextDecoration.BOLD),
                     Component.empty(),
@@ -244,10 +345,12 @@ class Game(val id: Int, val options: GameOptions) {
 
     fun respawn(player: Player) = with(player) {
         inventory.clear()
-        health = 20f
+        player.heal()
         teleport(getRandomRespawnPosition())
         stopSpectating()
         isInvisible = false
+        player.setCanPickupItem(true)
+        player.blocksumo.canBeHit = true
         gameMode = GameMode.SURVIVAL
         setNoGravity(false)
         clearEffects()
@@ -258,25 +361,66 @@ class Game(val id: Int, val options: GameOptions) {
 
     }
 
+    private fun victory(player: Player) {
+        if (gameState == GameState.ENDING) return
+        gameState = GameState.ENDING
 
-    private fun getRandomRespawnPosition(): Position {
+        itemLoopTask?.cancel()
+
+        instance.entities
+            .filter { it !is Player }
+            .forEach(Entity::remove)
+
+        players.forEach {
+            it.isInvisible = false
+        }
+
+        respawnTasks.forEach {
+            it.cancel()
+        }
+
+
+        val message = Component.text()
+            .append(Component.text("VICTORY", NamedTextColor.GOLD, TextDecoration.BOLD))
+            .append(Component.text("\n${player.username} won the game", NamedTextColor.WHITE))
+            .build()
+
+        playerAudience.sendMessage(message)
+
+        Manager.scheduler.buildTask { destroy() }
+            .delay(Duration.ofSeconds(6)).schedule()
+    }
+
+    private fun destroy() {
+        GameManager.deleteGame(this)
+
+
+        respawnTasks.clear()
+        players.forEach {
+            scoreboard.removeViewer(it)
+            GameManager.addPlayer(it)
+        }
+        players.clear()
+    }
+
+
+    private fun getRandomRespawnPosition(): Pos {
         val angle: Double = ThreadLocalRandom.current().nextDouble() * 360
         val x = cos(angle) * (15 - 2)
         val z = sin(angle) * (15 - 2)
 
-        val pos: Position = spawnPos.clone().add(x, -2.0, z)
-        val blockPos: BlockPosition = pos.toBlockPosition()
-        val angle1: Vector = spawnPos.clone().subtract(pos.x, pos.y, pos.z).toVector()
+        var pos = spawnPos.add(x, -1.0, z)
+        val angle1 = spawnPos.sub(pos.x(), pos.y(), pos.z())
 
-        pos.direction = angle1
-        pos.pitch = 90f
+        pos = pos.withDirection(angle1).withPitch(90f)
 
-        instance.setBlock(blockPos.clone().add(0, 1, 0), Block.AIR)
-        instance.setBlock(blockPos.clone().add(0, 2, 0), Block.AIR)
+        instance.setBlock(pos.add(0.0, 1.0, 0.0), Block.AIR)
+        instance.setBlock(pos.add(0.0, 2.0, 0.0), Block.AIR)
 
-        instance.setBlock(blockPos, Block.BEDROCK)
-        Manager.scheduler.buildTask { instance.setBlock(blockPos, Block.WHITE_WOOL) }
+        instance.setBlock(pos, Block.BEDROCK)
+        Manager.scheduler.buildTask { instance.setBlock(pos, Block.WHITE_WOOL) }.delay(Duration.ofSeconds(3)).schedule()
 
-        return pos.clone().add(0.0, 1.0, 0.0)
+
+        return pos.add(0.0, 1.0, 0.0)
     }
 }

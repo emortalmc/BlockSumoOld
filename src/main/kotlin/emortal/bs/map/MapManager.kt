@@ -7,17 +7,13 @@ import world.cepi.kstom.Manager
 
 object MapManager {
 
-    val mapMap = HashMap<String, Instance>()
-
-    fun init(extension: Extension) {
+    fun get(): Instance {
         val mapName = "forest"
-
-        extension.logger.info("Loading map '$mapName'...")
 
         val storageLocation = Manager.storage.getLocation(mapName)
         val instance = Manager.instance.createInstanceContainer(storageLocation)
         instance.chunkGenerator = VoidGenerator
 
-        mapMap[mapName] = instance
+        return instance
     }
 }

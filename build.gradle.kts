@@ -1,5 +1,4 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 
 plugins {
     // Apply the Kotlin JVM plugin to add support for Kotlin.
@@ -39,9 +38,9 @@ dependencies {
     compileOnly(kotlin("reflect"))
 
     // Compile Minestom into project
-    compileOnly("com.github.Minestom:Minestom:b9864a1a28")
+    compileOnly("com.github.Minestom:Minestom:a828a02499")
 
-    compileOnly("com.github.Project-Cepi:KStom:0ecbf01293")
+    compileOnly("com.github.emortaldev:KStom:37fbbde9f9")
 
     compileOnly("dev.sejtam:MineSchem-Core:3.0.0")
 

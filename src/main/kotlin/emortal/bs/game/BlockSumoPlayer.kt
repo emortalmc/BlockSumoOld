@@ -2,23 +2,29 @@ package emortal.bs.game
 
 import net.minestom.server.entity.Player
 import net.minestom.server.tag.Tag
+import java.util.concurrent.ConcurrentHashMap
 
-val Player.kingpin: KingpinPlayer
-    get() = KingpinPlayer.from(this)
+val Player.blocksumo: BlockSumoPlayer
+    get() = BlockSumoPlayer.from(this)
 
-class KingpinPlayer(val player: Player) {
+class BlockSumoPlayer(val player: Player) {
 
     companion object {
         val livesTag = Tag.Integer("lives")
         val killsTag = Tag.Integer("kills")
         val deadTag = Tag.Byte("dead")
+        val canBeHitTag = Tag.Byte("canBeHit")
 
-        val kingpinMap: MutableMap<Player, KingpinPlayer> = mutableMapOf()
+        private val blockSumoPlayerMap: ConcurrentHashMap<Player, BlockSumoPlayer> = ConcurrentHashMap()
 
-        fun from(player: Player): KingpinPlayer {
-            kingpinMap.computeIfAbsent(player, ::KingpinPlayer);
+        fun from(player: Player): BlockSumoPlayer {
+            blockSumoPlayerMap.computeIfAbsent(player, ::BlockSumoPlayer);
 
-            return kingpinMap[player]!!
+            return blockSumoPlayerMap[player]!!
+        }
+
+        fun removeFrom(player: Player) {
+            blockSumoPlayerMap.remove(player)
         }
     }
 
@@ -29,13 +35,17 @@ class KingpinPlayer(val player: Player) {
         get() = player.getTag(livesTag)!!
         set(value) = player.setTag(livesTag, value)
     var dead: Boolean
-        get() = player.getTag(deadTag)!!.toInt() == 0
+        get() = player.getTag(deadTag)!!.toInt() == 1
         set(value) = player.setTag(deadTag, if (value) 1 else 0)
+    var canBeHit: Boolean
+        get() = player.getTag(canBeHitTag)!!.toInt() == 1
+        set(value) = player.setTag(canBeHitTag, if (value) 1 else 0)
 
     init {
         player.setTag(livesTag, 5)
         player.setTag(killsTag, 0)
         player.setTag(deadTag, 0)
+        player.setTag(canBeHitTag, 1)
     }
 
     // TODO: Team colours
