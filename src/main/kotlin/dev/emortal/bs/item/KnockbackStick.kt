@@ -1,4 +1,4 @@
-package emortal.bs.item
+package dev.emortal.bs.item
 
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.text.Component
@@ -32,7 +32,6 @@ object KnockbackStick : Powerup(
     }
 
     override fun use(player: Player, pos: Pos?) {
-
         removeOne(player)
 
         player.playSound(Sound.sound(SoundEvent.ENTITY_ITEM_BREAK, Sound.Source.PLAYER, 1f, 1f))

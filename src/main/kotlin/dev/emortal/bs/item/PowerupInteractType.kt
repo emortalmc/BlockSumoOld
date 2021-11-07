@@ -1,7 +1,8 @@
-package emortal.bs.item
+package dev.emortal.bs.item
 
 enum class PowerupInteractType {
     PLACE,
     USE,
-    ATTACK
+    ATTACK,
+    OTHER
 }

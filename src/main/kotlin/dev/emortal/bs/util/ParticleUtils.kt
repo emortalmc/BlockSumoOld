@@ -1,4 +1,4 @@
-package emortal.bs.util
+package dev.emortal.bs.util
 
 import net.kyori.adventure.util.RGBLike
 import net.minestom.server.coordinate.Pos
@@ -64,11 +64,13 @@ fun Instance.sendParticle(
     count: Int,
     data: Float
 ) {
-    PacketUtils.sendGroupedPacket(this.players, ParticleCreator.createParticlePacket(
-        particle, false,
-        pos.x(), pos.y(), pos.z(),
-        offsetX, offsetY, offsetZ, data, count, null
-    ))
+    PacketUtils.sendGroupedPacket(
+        this.players, ParticleCreator.createParticlePacket(
+            particle, false,
+            pos.x(), pos.y(), pos.z(),
+            offsetX, offsetY, offsetZ, data, count, null
+        )
+    )
 }
 
 /**

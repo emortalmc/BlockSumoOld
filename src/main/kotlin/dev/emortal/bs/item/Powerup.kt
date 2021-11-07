@@ -1,4 +1,4 @@
-package emortal.bs.item
+package dev.emortal.bs.item
 
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextDecoration
@@ -26,8 +26,9 @@ sealed class Powerup(
         val registeredMap: Map<String, Powerup>
             get() = Powerup::class.sealedSubclasses.mapNotNull { it.objectInstance }.associateBy { it.id }
 
-        fun random(spawnType: SpawnType): Powerup {
-            val possiblePowerups = registeredMap.values.filter { it.rarity != Rarity.IMPOSSIBLE && it.spawnType == spawnType }
+        fun randomWithRarity(spawnType: SpawnType): Powerup {
+            val possiblePowerups =
+                registeredMap.values.filter { it.rarity != Rarity.IMPOSSIBLE && it.spawnType == spawnType }
             var totalWeight = 0
             for (powerup in possiblePowerups) {
                 totalWeight += powerup.rarity.weight

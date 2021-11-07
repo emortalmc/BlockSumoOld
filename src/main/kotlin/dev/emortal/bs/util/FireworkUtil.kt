@@ -1,4 +1,4 @@
-package emortal.bs.util
+package dev.emortal.bs.util
 
 import net.minestom.server.coordinate.Pos
 import net.minestom.server.entity.Entity

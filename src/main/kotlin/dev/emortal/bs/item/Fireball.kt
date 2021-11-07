@@ -1,29 +1,33 @@
-package emortal.bs.item
+package dev.emortal.bs.item
 
-import emortal.bs.game.Game
-import emortal.bs.util.SphereUtil
-import emortal.bs.util.sendParticle
+import dev.emortal.bs.util.SphereUtil
+import dev.emortal.bs.util.sendParticle
 import net.kyori.adventure.sound.Sound
 import net.minestom.server.coordinate.Pos
 import net.minestom.server.entity.Entity
 import net.minestom.server.entity.EntityType
 import net.minestom.server.entity.GameMode
 import net.minestom.server.entity.Player
+import net.minestom.server.instance.batch.AbsoluteBlockBatch
+import net.minestom.server.instance.block.Block
 import net.minestom.server.item.Material
 import net.minestom.server.particle.Particle
 import net.minestom.server.sound.SoundEvent
 import net.minestom.server.utils.time.TimeUnit
 import world.cepi.kstom.Manager
+import world.cepi.kstom.adventure.asMini
 import world.cepi.kstom.util.playSound
 
 object Fireball : Powerup(
-    Game.mini.parse("<gradient:gold:#7f563c>Fireball"),
+    "<gold>Fireball".asMini(),
     "fireball",
     Material.FIRE_CHARGE,
     Rarity.COMMON,
     PowerupInteractType.USE,
     SpawnType.EVERYWHERE
 ) {
+
+    val sphere = SphereUtil.getBlocksInSphere(3)
 
     override fun use(player: Player, pos: Pos?) {
         removeOne(player)
@@ -38,10 +42,13 @@ object Fireball : Powerup(
 
         fireballEntity.setInstance(instance, player.position.add(0.0, 1.0, 0.0))
 
-        player.instance!!.playSound(Sound.sound(SoundEvent.ENTITY_GHAST_SHOOT, Sound.Source.BLOCK, 1f, 1f), player.position)
+        player.instance!!.playSound(
+            Sound.sound(SoundEvent.ENTITY_GHAST_SHOOT, Sound.Source.BLOCK, 1f, 1f),
+            player.position
+        )
 
         val task = Manager.scheduler.buildTask {
-            if (fireballEntity.position.x() == 0.0 || fireballEntity.position.y() == 0.0 || fireballEntity.position.z() == 0.0) {
+            if (fireballEntity.velocity.x() == 0.0 || fireballEntity.velocity.y() == 0.0 || fireballEntity.velocity.z() == 0.0) {
                 collide(fireballEntity)
             }
 
@@ -52,16 +59,31 @@ object Fireball : Powerup(
     }
 
     override fun collide(entity: Entity) {
-        entity.instance!!.sendParticle(Particle.EXPLOSION_EMITTER, entity.position, 0f, 0f, 0f, 1)
-        entity.instance!!.playSound(Sound.sound(SoundEvent.ENTITY_GENERIC_EXPLODE, Sound.Source.BLOCK, 1f, 1f), entity.position)
+        entity.instance?.sendParticle(Particle.EXPLOSION_EMITTER, entity.position, 0f, 0f, 0f, 1)
+        entity.instance?.playSound(
+            Sound.sound(SoundEvent.ENTITY_GENERIC_EXPLODE, Sound.Source.BLOCK, 1f, 1f),
+            entity.position
+        )
 
-        entity.instance!!.entities.filterIsInstance<Player>().filter { it.gameMode == GameMode.SURVIVAL}.forEach {
+        entity.instance?.entities?.filterIsInstance<Player>()?.filter { it.gameMode == GameMode.SURVIVAL }?.forEach {
             val distance = it.getDistance(entity)
             if (distance > 5.25) return@forEach
-            it.velocity = it.position.asVec().sub(entity.position.asVec()).normalize().mul(14 / Math.max(1.0, distance / 3))
+            it.velocity =
+                it.position.asVec().sub(entity.position.asVec()).normalize().mul(14 / Math.max(1.0, distance / 3))
         }
 
-        SphereUtil.airSphere(entity.instance!!, entity.position)
+        val batch = AbsoluteBlockBatch()
+
+        sphere.forEach {
+            val blockPos = it.add(it.x(), it.y(), it.z())
+            val block = entity.instance!!.getBlock(blockPos)
+
+            if (!block.name().contains("WOOL", true)) return@forEach
+
+            batch.setBlock(blockPos, Block.AIR)
+        }
+
+        batch.apply(entity.instance!!) {}
 
         Manager.scheduler.getTask(entity.getTag(taskIDTag)!!).cancel()
 

@@ -38,13 +38,9 @@ dependencies {
     compileOnly(kotlin("reflect"))
 
     // Compile Minestom into project
-    compileOnly("com.github.Minestom:Minestom:a828a02499")
-
-    compileOnly("com.github.emortaldev:KStom:37fbbde9f9")
-
-    compileOnly("dev.sejtam:MineSchem-Core:3.0.0")
-
-    implementation("net.kyori:adventure-text-minimessage:4.1.0-SNAPSHOT")
+    compileOnly("com.github.Minestom:Minestom:0bcfc39a9d")
+    compileOnly("com.github.EmortalMC:Immortal:a226a09091")
+    implementation("com.github.EmortalMC:Rayfast:07d8daf030")
 
     // import kotlinx serialization
     compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.2.2")
@@ -83,13 +79,13 @@ tasks {
 }
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_11
-    targetCompatibility = JavaVersion.VERSION_11
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(17))
+    }
 }
 
-
 val compileKotlin: KotlinCompile by tasks
-compileKotlin.kotlinOptions.jvmTarget = JavaVersion.VERSION_11.toString()
+compileKotlin.kotlinOptions.jvmTarget = JavaVersion.VERSION_16.toString()
 
 compileKotlin.kotlinOptions {
     freeCompilerArgs = listOf("-Xinline-classes")

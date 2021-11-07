@@ -1,4 +1,4 @@
-package emortal.bs.item
+package dev.emortal.bs.item
 
 enum class SpawnType {
     MIDDLE,
