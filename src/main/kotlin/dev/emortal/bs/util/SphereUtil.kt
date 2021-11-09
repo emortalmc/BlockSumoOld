@@ -2,6 +2,8 @@ package dev.emortal.bs.util
 
 import net.minestom.server.coordinate.Point
 import net.minestom.server.coordinate.Vec
+import net.minestom.server.instance.batch.RelativeBlockBatch
+import net.minestom.server.instance.block.Block
 
 object SphereUtil {
 
@@ -18,6 +20,14 @@ object SphereUtil {
             }
         }
         return list
+    }
+
+    fun airBatch(radius: Int): RelativeBlockBatch {
+        val batch = RelativeBlockBatch()
+
+        getBlocksInSphere(radius).forEach { batch.setBlock(it, Block.AIR) }
+
+        return batch
     }
 
 }

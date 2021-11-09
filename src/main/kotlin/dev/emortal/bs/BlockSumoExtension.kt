@@ -10,6 +10,7 @@ import world.cepi.kstom.adventure.asMini
 class BlockSumoExtension : Extension() {
 
     override fun initialize() {
+
         GameManager.registerGame<BlockSumoGame>(
             eventNode,
             "blocksumo",
@@ -17,7 +18,7 @@ class BlockSumoExtension : Extension() {
             true,
             WhenToRegisterEvents.GAME_START,
             GameOptions(
-                maxPlayers = 16,
+                maxPlayers = 12,
                 minPlayers = 2,
                 10,
             )

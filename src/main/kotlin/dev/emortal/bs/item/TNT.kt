@@ -1,7 +1,6 @@
 package dev.emortal.bs.item
 
 import dev.emortal.bs.util.SphereUtil
-import dev.emortal.bs.util.sendParticle
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
@@ -15,11 +14,14 @@ import net.minestom.server.entity.metadata.other.PrimedTntMeta
 import net.minestom.server.instance.batch.AbsoluteBlockBatch
 import net.minestom.server.instance.block.Block
 import net.minestom.server.item.Material
-import net.minestom.server.particle.Particle
 import net.minestom.server.sound.SoundEvent
 import net.minestom.server.utils.time.TimeUnit
 import world.cepi.kstom.Manager
 import world.cepi.kstom.util.playSound
+import world.cepi.particle.Particle
+import world.cepi.particle.ParticleType
+import world.cepi.particle.data.OffsetAndSpeed
+import world.cepi.particle.showParticle
 
 object TNT : Powerup(
     Component.text("TNT", NamedTextColor.RED),
@@ -32,7 +34,7 @@ object TNT : Powerup(
 
     val sphere = SphereUtil.getBlocksInSphere(4)
 
-    override fun use(player: Player, pos: Pos?) {
+    override fun use(player: Player, pos: Pos?, entity: Entity?) {
         if (pos == null) {
             return
         }
@@ -53,7 +55,14 @@ object TNT : Powerup(
         player.instance!!.playSound(Sound.sound(SoundEvent.ENTITY_TNT_PRIMED, Sound.Source.BLOCK, 2f, 1f), pos)
 
         Manager.scheduler.buildTask {
-            player.instance!!.sendParticle(Particle.EXPLOSION_EMITTER, tntEntity.position, 0f, 0f, 0f, 1)
+            tntEntity.instance!!.showParticle(
+                Particle.particle(
+                    type = ParticleType.EXPLOSION_EMITTER,
+                    count = 1,
+                    data = OffsetAndSpeed(0f, 0f, 0f, 0f),
+                ),
+                tntEntity.position.asVec()
+            )
             player.instance!!.playSound(
                 Sound.sound(SoundEvent.ENTITY_GENERIC_EXPLODE, Sound.Source.BLOCK, 2f, 1f),
                 tntEntity.position
@@ -66,7 +75,7 @@ object TNT : Powerup(
                     val distance = it.getDistance(tntEntity)
                     if (distance > 6) return@forEach
                     it.velocity =
-                        it.position.sub(tntEntity.position).asVec().normalize().mul(18.5 / Math.max(1.0, distance / 4))
+                        it.position.sub(tntEntity.position).asVec().normalize().mul(80.0)
                 }
 
             val batch = AbsoluteBlockBatch()

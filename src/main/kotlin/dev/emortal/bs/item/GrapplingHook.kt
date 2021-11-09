@@ -2,6 +2,7 @@ package dev.emortal.bs.item
 
 import net.kyori.adventure.sound.Sound
 import net.minestom.server.coordinate.Pos
+import net.minestom.server.entity.Entity
 import net.minestom.server.entity.Player
 import net.minestom.server.item.Material
 import net.minestom.server.sound.SoundEvent
@@ -17,14 +18,25 @@ object GrapplingHook : Powerup(
     SpawnType.MIDDLE
 ) {
 
-    override fun use(player: Player, pos: Pos?) {
+    // When fishing rod retracted
+    override fun use(player: Player, pos: Pos?, entity: Entity?) {
+        if (pos == null) return
+
         removeOne(player)
 
         player.instance!!.playSound(
             Sound.sound(SoundEvent.ENTITY_FISHING_BOBBER_RETRIEVE, Sound.Source.PLAYER, 1f, 1f),
             player.position
         )
+        player.playSound(
+            Sound.sound(SoundEvent.ENTITY_ITEM_BREAK, Sound.Source.PLAYER, 1f, 1f),
+            player.position
+        )
 
+        player.velocity = pos.sub(player.position).asVec().normalize().mul(40.0)
+        if (entity != null) {
+            entity.velocity = player.position.sub(entity.position).asVec().normalize().mul(40.0)
+        }
 
     }
 

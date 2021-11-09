@@ -6,22 +6,29 @@ import net.minestom.server.coordinate.Pos
 import net.minestom.server.entity.Entity
 import net.minestom.server.entity.Player
 import net.minestom.server.item.ItemStack
+import net.minestom.server.item.ItemStackBuilder
 import net.minestom.server.item.Material
 import net.minestom.server.tag.Tag
 import java.util.concurrent.ThreadLocalRandom
 
 sealed class Powerup(
     val name: Component,
-    val id: String,
-    private val material: Material,
-    val rarity: Rarity,
-    val powerupInteractType: PowerupInteractType,
-    val spawnType: SpawnType
-) {
+    id: String,
+    material: Material,
+    rarity: Rarity,
+    val interactType: PowerupInteractType,
+    val spawnType: SpawnType,
+    itemCreate: (ItemStackBuilder) -> Unit = { }
+) : Item(id, material, rarity, itemCreate) {
 
     companion object {
         val idTag = Tag.String("id")
         val taskIDTag = Tag.Integer("taskID")
+
+        val Player.heldPowerup: Powerup?
+            get() = itemInMainHand.getPowerup
+        val ItemStack.getPowerup: Powerup?
+            get() = registeredMap[getTag(itemIdTag)]
 
         val registeredMap: Map<String, Powerup>
             get() = Powerup::class.sealedSubclasses.mapNotNull { it.objectInstance }.associateBy { it.id }
@@ -47,19 +54,21 @@ sealed class Powerup(
         }
     }
 
-    open val item by lazy {
-        ItemStack.builder(material)
-            .displayName(name.decoration(TextDecoration.ITALIC, false).decorate(TextDecoration.BOLD))
-            .lore(rarity.component.decoration(TextDecoration.ITALIC, false))
-            .meta {
-                it.set(idTag, id)
-            }
-            .build()
-    }
-
-    abstract fun use(player: Player, pos: Pos?)
+    abstract fun use(player: Player, pos: Pos?, entity: Entity? = null)
     open fun collide(entity: Entity) {
 
+    }
+
+    override fun createItemStack(): ItemStack {
+        return ItemStack.builder(material)
+            .displayName(name.decoration(TextDecoration.ITALIC, false))
+            .meta {
+                it.setTag(itemIdTag, id)
+                it
+            }
+            .lore(rarity.component.decoration(TextDecoration.ITALIC, false))
+            .also { itemCreate.invoke(it) }
+            .build()
     }
 
     fun removeOne(player: Player) {

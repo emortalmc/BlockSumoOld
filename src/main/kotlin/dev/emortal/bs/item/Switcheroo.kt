@@ -4,6 +4,7 @@ import dev.emortal.bs.util.RaycastUtil
 import emortal.lazertag.raycast.RaycastResultType
 import net.kyori.adventure.sound.Sound
 import net.minestom.server.coordinate.Pos
+import net.minestom.server.entity.Entity
 import net.minestom.server.entity.GameMode
 import net.minestom.server.entity.Player
 import net.minestom.server.item.Material
@@ -21,7 +22,7 @@ object Switcheroo : Powerup(
     SpawnType.MIDDLE
 ) {
 
-    override fun use(player: Player, pos: Pos?) {
+    override fun use(player: Player, pos: Pos?, entity: Entity?) {
         removeOne(player)
 
         player.instance!!.playSound(

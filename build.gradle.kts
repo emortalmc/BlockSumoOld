@@ -38,8 +38,8 @@ dependencies {
     compileOnly(kotlin("reflect"))
 
     // Compile Minestom into project
-    compileOnly("com.github.Minestom:Minestom:0bcfc39a9d")
-    compileOnly("com.github.EmortalMC:Immortal:a226a09091")
+    compileOnly("com.github.Minestom:Minestom:5734097789")
+    compileOnly("com.github.EmortalMC:Immortal:ab1f582236")
     implementation("com.github.EmortalMC:Rayfast:07d8daf030")
 
     // import kotlinx serialization
