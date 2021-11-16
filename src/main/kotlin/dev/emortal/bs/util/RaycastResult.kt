@@ -1,4 +1,4 @@
-package emortal.lazertag.raycast
+package dev.emortal.bs.util
 
 import net.minestom.server.coordinate.Point
 import net.minestom.server.entity.Entity

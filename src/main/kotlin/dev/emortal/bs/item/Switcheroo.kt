@@ -1,7 +1,7 @@
 package dev.emortal.bs.item
 
+import dev.emortal.bs.util.RaycastResultType
 import dev.emortal.bs.util.RaycastUtil
-import emortal.lazertag.raycast.RaycastResultType
 import net.kyori.adventure.sound.Sound
 import net.minestom.server.coordinate.Pos
 import net.minestom.server.entity.Entity

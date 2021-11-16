@@ -3,8 +3,6 @@ package dev.emortal.bs.util
 import dev.emortal.rayfast.area.area3d.Area3d
 import dev.emortal.rayfast.area.area3d.Area3dRectangularPrism
 import dev.emortal.rayfast.grid.GridCast
-import emortal.lazertag.raycast.RaycastResult
-import emortal.lazertag.raycast.RaycastResultType
 import net.minestom.server.collision.BoundingBox
 import net.minestom.server.coordinate.Point
 import net.minestom.server.coordinate.Pos
@@ -28,10 +26,12 @@ object RaycastUtil {
     init {
         Area3d.CONVERTER.register(BoundingBox::class.java) { box ->
             boundingBoxToArea3dMap.computeIfAbsent(box) { it ->
+                val expandedBox = it.expand(0.25, 0.25, 0.25)
+
                 Area3dRectangularPrism.wrapper(
-                    it,
-                    { it.minX - 0.25 }, { it.minY - 0.25 }, { it.minZ - 0.25 },
-                    { it.maxX + 0.25 }, { it.maxY + 0.25 }, { it.maxZ + 0.25 }
+                    expandedBox,
+                    { expandedBox.minX }, { expandedBox.minY }, { expandedBox.minZ },
+                    { expandedBox.maxX }, { expandedBox.maxY }, { expandedBox.maxZ }
                 )
             }
             boundingBoxToArea3dMap[box]

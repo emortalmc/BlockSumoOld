@@ -25,8 +25,15 @@ sealed class Powerup(
         val idTag = Tag.String("id")
         val taskIDTag = Tag.Integer("taskID")
 
-        val Player.heldPowerup: Powerup?
+        var Player.heldPowerup: Powerup?
             get() = itemInMainHand.getPowerup
+            set(value) {
+                if (value == null) {
+                    itemInMainHand = ItemStack.AIR
+                    return
+                }
+                itemInMainHand = value.createItemStack()
+            }
         val ItemStack.getPowerup: Powerup?
             get() = registeredMap[getTag(itemIdTag)]
 

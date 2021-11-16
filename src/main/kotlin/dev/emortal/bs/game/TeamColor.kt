@@ -7,7 +7,7 @@ import net.minestom.server.item.Material
 
 enum class TeamColor(val color: RGBLike, val woolBlock: Block, val woolMaterial: Material) {
 
-    BLACK(NamedTextColor.BLACK, Block.BLACK_WOOL, Material.BLACK_WOOL),
+    //BLACK(NamedTextColor.BLACK, Block.BLACK_WOOL, Material.BLACK_WOOL),
     DARK_BLUE(NamedTextColor.DARK_BLUE, Block.BLUE_WOOL, Material.BLUE_WOOL),
     DARK_GREEN(NamedTextColor.DARK_GREEN, Block.GREEN_WOOL, Material.GREEN_WOOL),
     DARK_RED(NamedTextColor.DARK_RED, Block.RED_WOOL, Material.RED_WOOL),

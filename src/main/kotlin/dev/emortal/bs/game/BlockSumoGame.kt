@@ -6,7 +6,6 @@ import dev.emortal.bs.item.Powerup.Companion.heldPowerup
 import dev.emortal.bs.item.PowerupInteractType
 import dev.emortal.bs.item.Shears
 import dev.emortal.bs.item.SpawnType
-import dev.emortal.bs.map.MapManager
 import dev.emortal.bs.util.FireworkUtil
 import dev.emortal.immortal.game.*
 import dev.emortal.immortal.util.reset
@@ -31,6 +30,7 @@ import net.minestom.server.event.entity.EntityAttackEvent
 import net.minestom.server.event.item.ItemDropEvent
 import net.minestom.server.event.item.PickupItemEvent
 import net.minestom.server.event.player.*
+import net.minestom.server.instance.AnvilLoader
 import net.minestom.server.instance.Instance
 import net.minestom.server.instance.block.Block
 import net.minestom.server.item.ItemStack
@@ -42,6 +42,7 @@ import net.minestom.server.scoreboard.Sidebar
 import net.minestom.server.sound.SoundEvent
 import net.minestom.server.timer.Task
 import net.minestom.server.utils.Direction
+import net.minestom.server.utils.NamespaceID
 import world.cepi.kstom.Manager
 import world.cepi.kstom.adventure.sendMiniMessage
 import world.cepi.kstom.event.listenOnly
@@ -168,8 +169,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             }
 
             if (player.inventory.itemInMainHand.material.name().endsWith("wool", ignoreCase = true)) {
-                //player.inventory.itemInMainHand = ItemStack.builder(player.color.woolMaterial).amount(64).build()
-                this.consumeBlock(false)
+                player.inventory.itemInMainHand = ItemStack.builder(player.color.woolMaterial).amount(64).build()
 
                 if (isNextToBarrier(player.instance!!, blockPosition)) {
                     isCancelled = true
@@ -698,7 +698,11 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     }
 
     override fun instanceCreate(): Instance {
-        return MapManager.get()
+        val dimension = Manager.dimensionType.getDimension(NamespaceID.from("fullbright"))!!
+        val instance = Manager.instance.createInstanceContainer(dimension)
+        instance.chunkLoader = AnvilLoader("forest")
+
+        return instance
     }
 
 }

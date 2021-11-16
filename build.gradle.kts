@@ -39,7 +39,7 @@ dependencies {
 
     // Compile Minestom into project
     compileOnly("com.github.Minestom:Minestom:5734097789")
-    compileOnly("com.github.EmortalMC:Immortal:ab1f582236")
+    compileOnly("com.github.EmortalMC:Immortal:cd8a42d748")
     implementation("com.github.EmortalMC:Rayfast:07d8daf030")
 
     // import kotlinx serialization

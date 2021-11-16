@@ -1,4 +1,4 @@
-package emortal.lazertag.raycast
+package dev.emortal.bs.util
 
 enum class RaycastResultType {
     HIT_ENTITY,

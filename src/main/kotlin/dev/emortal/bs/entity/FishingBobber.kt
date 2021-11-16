@@ -38,7 +38,7 @@ class FishingBobber(val shooter: Player) : Entity(EntityType.FISHING_BOBBER) {
     }
 
     init {
-        setGravity(0.18, 0.02)
+        //setGravity(BobberStuffCommand.bobberDragPerTick, BobberStuffCommand.bobberAcceleration)
         ownerEntity = shooter
     }
 
@@ -90,7 +90,7 @@ class FishingBobber(val shooter: Player) : Entity(EntityType.FISHING_BOBBER) {
             cos(playerYaw / 180.0F * PI) * cos(playerPitch / 180.0F * PI) * maxVelocity
         )
             .normalize()
-            .mul(30.0)
+            .mul(20.0)
 
 
     }

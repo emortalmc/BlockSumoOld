@@ -1,5 +1,6 @@
 package dev.emortal.bs
 
+import dev.emortal.bs.commands.PowerupCommand
 import dev.emortal.bs.game.BlockSumoGame
 import dev.emortal.immortal.game.GameManager
 import dev.emortal.immortal.game.GameOptions
@@ -10,7 +11,6 @@ import world.cepi.kstom.adventure.asMini
 class BlockSumoExtension : Extension() {
 
     override fun initialize() {
-
         GameManager.registerGame<BlockSumoGame>(
             eventNode,
             "blocksumo",
@@ -24,10 +24,14 @@ class BlockSumoExtension : Extension() {
             )
         )
 
+        PowerupCommand.register()
+
         logger.info("[BlockSumo] Initialized!")
     }
 
     override fun terminate() {
+        PowerupCommand.unregister()
+
         logger.info("[BlockSumo] Terminated!")
     }
 
