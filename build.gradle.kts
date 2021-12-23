@@ -43,7 +43,7 @@ dependencies {
     implementation("com.github.EmortalMC:Rayfast:07d8daf030")
 
     // import kotlinx serialization
-    compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.2.2")
+    compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.3.2")
 }
 tasks.withType<Test> {
     useJUnitPlatform()
