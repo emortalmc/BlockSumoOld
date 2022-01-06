@@ -2,17 +2,18 @@ package dev.emortal.bs.item
 
 import net.kyori.adventure.text.format.TextDecoration
 import net.minestom.server.entity.Player
+import net.minestom.server.item.ItemMetaBuilder
 import net.minestom.server.item.ItemStack
-import net.minestom.server.item.ItemStackBuilder
 import net.minestom.server.item.Material
 import net.minestom.server.tag.Tag
+import world.cepi.kstom.item.item
 import java.util.concurrent.ThreadLocalRandom
 
 sealed class Item(
     val id: String,
     val material: Material,
     val rarity: Rarity,
-    val itemCreate: (ItemStackBuilder) -> Unit = { }
+    val itemCreate: (ItemMetaBuilder) -> Unit = { }
 ) {
 
     companion object {
@@ -48,14 +49,11 @@ sealed class Item(
     }
 
     open fun createItemStack(): ItemStack {
-        return ItemStack.builder(material)
-            .lore(rarity.component.decoration(TextDecoration.ITALIC, false))
-            .also { itemCreate.invoke(it) }
-            .meta {
-                it.setTag(itemIdTag, id)
-                it
-            }
-            .build()
+        return item(material) {
+            lore(rarity.component.decoration(TextDecoration.ITALIC, false))
+            itemCreate.invoke(this)
+            setTag(itemIdTag, id)
+        }
     }
 
 }

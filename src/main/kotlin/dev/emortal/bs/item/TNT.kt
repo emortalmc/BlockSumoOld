@@ -46,7 +46,7 @@ object TNT : Powerup(
         val tntMeta = tntEntity.entityMeta as PrimedTntMeta
         tntMeta.fuseTime = 60
 
-        tntEntity.setTag(idTag, id)
+        tntEntity.setTag(itemIdTag, id)
 
         val instance = player.instance!!
 

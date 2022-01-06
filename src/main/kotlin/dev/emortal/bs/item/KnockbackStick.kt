@@ -18,9 +18,7 @@ object KnockbackStick : Powerup(
     PowerupInteractType.ATTACK,
     SpawnType.EVERYWHERE,
     {
-        it.meta { meta ->
-            meta.enchantment(Enchantment.KNOCKBACK, 2)
-        }
+        it.enchantment(Enchantment.KNOCKBACK, 2)
     }
 ) {
 

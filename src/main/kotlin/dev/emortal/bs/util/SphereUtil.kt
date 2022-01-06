@@ -13,7 +13,7 @@ object SphereUtil {
         for (x in -radius..radius) {
             for (y in -radius..radius) {
                 for (z in -radius..radius) {
-                    if (x * x + y * y + z * z > radius * radius) continue
+                    if ((x * x) + (y * y) + (z * z) > radius * radius) continue
 
                     list.add(Vec(x.toDouble(), y.toDouble(), z.toDouble()))
                 }

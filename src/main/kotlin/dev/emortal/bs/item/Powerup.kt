@@ -5,10 +5,11 @@ import net.kyori.adventure.text.format.TextDecoration
 import net.minestom.server.coordinate.Pos
 import net.minestom.server.entity.Entity
 import net.minestom.server.entity.Player
+import net.minestom.server.item.ItemMetaBuilder
 import net.minestom.server.item.ItemStack
-import net.minestom.server.item.ItemStackBuilder
 import net.minestom.server.item.Material
 import net.minestom.server.tag.Tag
+import world.cepi.kstom.item.item
 import java.util.concurrent.ThreadLocalRandom
 
 sealed class Powerup(
@@ -18,11 +19,10 @@ sealed class Powerup(
     rarity: Rarity,
     val interactType: PowerupInteractType,
     val spawnType: SpawnType,
-    itemCreate: (ItemStackBuilder) -> Unit = { }
+    itemCreate: (ItemMetaBuilder) -> Unit = { }
 ) : Item(id, material, rarity, itemCreate) {
 
     companion object {
-        val idTag = Tag.String("id")
         val taskIDTag = Tag.Integer("taskID")
 
         var Player.heldPowerup: Powerup?
@@ -67,15 +67,12 @@ sealed class Powerup(
     }
 
     override fun createItemStack(): ItemStack {
-        return ItemStack.builder(material)
-            .displayName(name.decoration(TextDecoration.ITALIC, false))
-            .meta {
-                it.setTag(itemIdTag, id)
-                it
-            }
-            .lore(rarity.component.decoration(TextDecoration.ITALIC, false))
-            .also { itemCreate.invoke(it) }
-            .build()
+        return item(material) {
+            displayName(name.decoration(TextDecoration.ITALIC, false))
+            setTag(itemIdTag, id)
+            lore(rarity.component.decoration(TextDecoration.ITALIC, false))
+            itemCreate.invoke(this)
+        }
     }
 
     fun removeOne(player: Player) {

@@ -5,11 +5,8 @@ import net.minestom.server.instance.block.Block
 import net.minestom.server.item.Material
 
 object Shears : Item("shears", Material.SHEARS, Rarity.IMPOSSIBLE, {
-    it.meta { meta ->
-        meta.canDestroy(woolBlocks)
-        meta.canPlaceOn(woolBlocks)
-        meta
-    }
+    it.canDestroy(woolBlocks)
+    it.canPlaceOn(woolBlocks)
 }) {
 
     val woolBlocks = Block.values().filter { it.name().endsWith("WOOL", true) }.toMutableSet()

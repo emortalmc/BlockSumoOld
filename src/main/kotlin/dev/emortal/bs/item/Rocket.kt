@@ -1,5 +1,6 @@
 package dev.emortal.bs.item
 
+import dev.emortal.bs.BlockSumoExtension
 import dev.emortal.bs.util.SphereUtil
 import net.kyori.adventure.sound.Sound
 import net.minestom.server.coordinate.Pos
@@ -11,6 +12,7 @@ import net.minestom.server.instance.batch.AbsoluteBlockBatch
 import net.minestom.server.instance.block.Block
 import net.minestom.server.item.Material
 import net.minestom.server.sound.SoundEvent
+import net.minestom.server.timer.Task
 import net.minestom.server.utils.time.TimeUnit
 import world.cepi.kstom.Manager
 import world.cepi.kstom.adventure.asMini
@@ -30,13 +32,14 @@ object Rocket : Powerup(
 ) {
 
     val sphere = SphereUtil.getBlocksInSphere(3)
+    val entityTaskMap = hashMapOf<Entity, Task>()
 
     override fun use(player: Player, pos: Pos?, entity: Entity?) {
         removeOne(player)
 
         val beeEntity = Entity(EntityType.BEE)
         beeEntity.setNoGravity(true)
-        beeEntity.setTag(idTag, id)
+        beeEntity.setTag(itemIdTag, id)
         val originalVelocity = player.position.direction().normalize().mul(20.0)
         beeEntity.velocity = originalVelocity
 
@@ -65,7 +68,7 @@ object Rocket : Powerup(
             beeEntity.velocity = originalVelocity
         }.repeat(1, TimeUnit.SERVER_TICK).schedule()
 
-        beeEntity.setTag(taskIDTag, task.id)
+        BlockSumoExtension.taskMap[beeEntity] = task
     }
 
     override fun collide(entity: Entity) {
@@ -92,7 +95,7 @@ object Rocket : Powerup(
                 it.velocity = it.position.asVec()
                     .sub(entity.position.asVec())
                     .normalize()
-                    .mul(80.0)
+                    .mul(20.0)
             }
 
         val batch = AbsoluteBlockBatch()
@@ -108,7 +111,8 @@ object Rocket : Powerup(
 
         batch.apply(entity.instance!!) {}
 
-        Manager.scheduler.getTask(entity.getTag(taskIDTag)!!).cancel()
+        BlockSumoExtension.taskMap[entity]?.cancel()
+        BlockSumoExtension.taskMap.remove(entity)
 
         entity.remove()
     }
