@@ -42,8 +42,8 @@ object TNT : Powerup(
         removeOne(player)
 
         val tntEntity = Entity(EntityType.TNT)
-        tntEntity.velocity = Vec(0.0, 3.0, 0.0)
         val tntMeta = tntEntity.entityMeta as PrimedTntMeta
+        tntEntity.velocity = Vec(0.0, 3.0, 0.0)
         tntMeta.fuseTime = 60
 
         tntEntity.setTag(itemIdTag, id)
@@ -75,7 +75,7 @@ object TNT : Powerup(
                     val distance = it.getDistance(tntEntity)
                     if (distance > 6) return@forEach
                     it.velocity =
-                        it.position.sub(tntEntity.position).asVec().normalize().mul(80.0)
+                        it.position.sub(tntEntity.position).asVec().normalize().mul(40.0)
                 }
 
             val batch = AbsoluteBlockBatch()

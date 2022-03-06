@@ -48,7 +48,7 @@ object Rocket : Powerup(
         beeEntity.setInstance(instance, player.position.add(0.0, 1.0, 0.0))
 
         player.instance!!.playSound(
-            Sound.sound(SoundEvent.ENTITY_GHAST_SHOOT, Sound.Source.BLOCK, 1f, 1f),
+            Sound.sound(SoundEvent.ENTITY_BEE_HURT, Sound.Source.BLOCK, 1f, 1f),
             player.position
         )
 

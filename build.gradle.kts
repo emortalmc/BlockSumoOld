@@ -6,14 +6,14 @@ plugins {
     // Kotlinx serialization for any data format
     kotlin("plugin.serialization") version "1.6.10"
     // Shade the plugin
-    id("com.github.johnrengelman.shadow") version "7.1.0"
+    id("com.github.johnrengelman.shadow") version "7.1.2"
     // Allow publishing
     `maven-publish`
 
     // Apply the application plugin to add support for building a jar
     java
     // Dokka documentation w/ kotlin
-    id("org.jetbrains.dokka") version "1.5.0"
+    id("org.jetbrains.dokka") version "1.6.10"
 }
 
 repositories {
@@ -38,9 +38,9 @@ dependencies {
     compileOnly(kotlin("reflect"))
 
     // Compile Minestom into project
-    compileOnly("com.github.emortaldev:Minestom:78aaa3e629")
-    compileOnly("com.github.EmortalMC:Immortal:5133ba4779")
     implementation("com.github.EmortalMC:Rayfast:07d8daf030")
+    compileOnly("com.github.Minestom:Minestom:0366027c5d")
+    compileOnly("com.github.EmortalMC:Immortal:b4fe7e0bf6")
 
     // import kotlinx serialization
     compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.3.2")

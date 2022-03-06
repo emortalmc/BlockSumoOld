@@ -1,6 +1,12 @@
 package dev.emortal.bs.game
 
 import dev.emortal.bs.entity.FishingBobber
+import dev.emortal.bs.game.BlockSumoPlayerHelper.canBeHit
+import dev.emortal.bs.game.BlockSumoPlayerHelper.cleanup
+import dev.emortal.bs.game.BlockSumoPlayerHelper.color
+import dev.emortal.bs.game.BlockSumoPlayerHelper.kills
+import dev.emortal.bs.game.BlockSumoPlayerHelper.lastDamageTimestamp
+import dev.emortal.bs.game.BlockSumoPlayerHelper.lives
 import dev.emortal.bs.item.Powerup
 import dev.emortal.bs.item.Powerup.Companion.heldPowerup
 import dev.emortal.bs.item.PowerupInteractType
@@ -8,9 +14,9 @@ import dev.emortal.bs.item.Shears
 import dev.emortal.bs.item.SpawnType
 import dev.emortal.bs.util.showFirework
 import dev.emortal.immortal.game.*
+import dev.emortal.immortal.util.MinestomRunnable
 import dev.emortal.immortal.util.reset
 import dev.emortal.immortal.util.takeKnockback
-import dev.emortal.immortal.util.task
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
@@ -27,16 +33,21 @@ import net.minestom.server.entity.GameMode
 import net.minestom.server.entity.ItemEntity
 import net.minestom.server.entity.Player
 import net.minestom.server.entity.damage.DamageType
+import net.minestom.server.entity.damage.EntityDamage
+import net.minestom.server.entity.damage.EntityProjectileDamage
 import net.minestom.server.event.entity.EntityAttackEvent
+import net.minestom.server.event.entity.EntityDamageEvent
 import net.minestom.server.event.item.ItemDropEvent
 import net.minestom.server.event.item.PickupItemEvent
 import net.minestom.server.event.player.*
+import net.minestom.server.instance.AnvilLoader
 import net.minestom.server.instance.Instance
 import net.minestom.server.instance.batch.AbsoluteBlockBatch
 import net.minestom.server.instance.block.Block
 import net.minestom.server.item.ItemStack
 import net.minestom.server.item.firework.FireworkEffect
 import net.minestom.server.item.firework.FireworkEffectType
+import net.minestom.server.message.Messenger.sendMessage
 import net.minestom.server.network.packet.server.play.EffectPacket
 import net.minestom.server.network.packet.server.play.TeamsPacket
 import net.minestom.server.scoreboard.Sidebar
@@ -59,10 +70,10 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
     val spawnPos = Pos(0.5, 230.0, 0.5)
 
-    val destroyTasks = mutableListOf<Task>()
+    val destroyTasks = mutableListOf<MinestomRunnable>()
     var itemLoopTask: Task? = null
     var invItemLoopTask: Task? = null
-    var diamondBlockTask: Task? = null
+    var diamondBlockTask: MinestomRunnable? = null
     var diamondBlockPlayer: Player? = null
 
     fun updateScoreboard(player: Player) {
@@ -119,10 +130,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         player.setCanPickupItem(true)
 
         player.respawnPoint = spawnPos
-
-        player.scheduleNextTick {
-            player.gameMode = GameMode.SPECTATOR
-        }
+        player.gameMode = GameMode.SPECTATOR
     }
 
     override fun playerLeave(player: Player) {
@@ -146,21 +154,24 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             isCancelled = true
         }
 
-
         listenOnly<PlayerBlockPlaceEvent> {
+            consumeBlock(false)
+
             if (blockPosition.distanceSquared(spawnPos.sub(0.5, 0.0, 0.5)) < 6) {
-                destroyTasks.add(Manager.scheduler.buildTask {
-                    instance.setBlock(blockPosition, Block.AIR)
-                    // Send the block break effect packet
-                    sendGroupedPacket(
-                        EffectPacket(
-                            2001,
-                            blockPosition,
-                            block.stateId().toInt(),
-                            false
+                destroyTasks.add(object : MinestomRunnable(delay = Duration.ofSeconds(5), timer = timer) {
+                    override fun run() {
+                        instance.setBlock(blockPosition, Block.AIR)
+                        // Send the block break effect packet
+                        sendGroupedPacket(
+                            EffectPacket(
+                                2001,
+                                blockPosition,
+                                block.stateId().toInt(),
+                                false
+                            )
                         )
-                    )
-                }.delay(Duration.ofSeconds(5)).schedule())
+                    }
+                })
             }
 
             if (player.inventory.itemInMainHand.material.name().endsWith("wool", ignoreCase = true)) {
@@ -174,14 +185,14 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 return@listenOnly
             }
 
-            val heldItem = player.heldPowerup ?: return@listenOnly
-
             isCancelled = true
 
+            val heldItem = player.heldPowerup ?: return@listenOnly
             if (heldItem.interactType != PowerupInteractType.PLACE && heldItem.interactType != PowerupInteractType.USE) return@listenOnly
 
             heldItem.use(player, blockPosition.add(0.5, 0.1, 0.5).asPos())
         }
+
         listenOnly<PlayerBlockBreakEvent> {
             if (!block.name().contains("WOOL", true)) {
                 isCancelled = true
@@ -257,6 +268,12 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             }.delay(Duration.ofMillis(500)).schedule()
         }
 
+        listenOnly<EntityDamageEvent> {
+            val player = entity as? Player ?: return@listenOnly
+
+            player.lastDamageTimestamp = System.currentTimeMillis()
+        }
+
         listenOnly<PickupItemEvent> {
             if (entity is Player) {
                 if ((entity as Player).gameMode != GameMode.SURVIVAL) return@listenOnly
@@ -281,15 +298,25 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             }
 
             val borderSize = 20
+
+            var killer: Entity? = null
+            if (player.lastDamageTimestamp < System.currentTimeMillis() + 8000 && player.lastDamageSource != null) {
+                killer = when (val lastDamageSource = player.lastDamageSource) {
+                    is EntityDamage -> lastDamageSource.source
+                    is EntityProjectileDamage -> lastDamageSource.shooter
+                    else -> null
+                }
+            }
+
             if (player.position.x() > borderSize || player.position.x() < -borderSize) {
-                kill(player, null)
+                kill(player, killer)
             }
             if (player.position.z() > borderSize || player.position.z() < -borderSize) {
-                kill(player, null)
+                kill(player, killer)
             }
 
             if (player.position.y() < 217) {
-                kill(player, null)
+                kill(player, killer)
             }
 
             if (player.gameMode == GameMode.SURVIVAL) {
@@ -309,78 +336,65 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
                 if (isOnDiamondBlock) {
                     diamondBlockPlayer = player
-                    diamondBlockTask = task(repeat = Duration.ofSeconds(1), iterations = 20, finalIteration = { victory(player, VictoryType.DIAMOND_BLOCK) }) { _,i ->
 
-                        val seconds = 20 - i
+                    diamondBlockTask = object : MinestomRunnable(repeat = Duration.ofSeconds(1), iterations = 20, timer = timer) {
+                        override fun run() {
+                            val seconds = iterations - currentIteration
 
-                        if (seconds % 5 == 0 && seconds <= 15) {
-                            playSound(
-                                Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_PLING, Sound.Source.MASTER, 1f, 1f),
-                                Sound.Emitter.self()
+                            if (seconds % 5 == 0 && seconds <= 15) {
+                                playSound(
+                                    Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_PLING, Sound.Source.MASTER, 1f, 1f),
+                                    Sound.Emitter.self()
+                                )
+
+                                sendMessage(
+                                    Component.text()
+                                        .append(Component.text("!", NamedTextColor.RED, TextDecoration.BOLD))
+                                        .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
+                                        .append(Component.text(player.username, TextColor.color(player.color.color), TextDecoration.BOLD))
+                                        .append(Component.text(" is standing on the diamond block!\n", NamedTextColor.GRAY))
+                                        .append(Component.text("!", NamedTextColor.RED, TextDecoration.BOLD))
+                                        .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
+                                        .append(Component.text("They win in ", NamedTextColor.GRAY))
+                                        .append(Component.text(seconds, NamedTextColor.RED))
+                                        .append(Component.text(" seconds!", NamedTextColor.GRAY))
+                                        .build()
+                                )
+                            }
+
+                            if (seconds <= 5) {
+                                playSound(
+                                    Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_PLING, Sound.Source.MASTER, 1f, 1f),
+                                    Sound.Emitter.self()
+                                )
+
+                                showTitle(
+                                    Title.title(
+                                        Component.text(seconds, lerp(seconds / 5f, NamedTextColor.RED, NamedTextColor.GREEN)),
+                                        Component.empty(),
+                                        Title.Times.of(Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(1))
+                                    )
+                                )
+                            }
+
+                            player.playSound(
+                                Sound.sound(
+                                    SoundEvent.ENTITY_EXPERIENCE_ORB_PICKUP,
+                                    Sound.Source.MASTER,
+                                    0.25f,
+                                    2f
+                                )
                             )
-
-                            sendMessage(
+                            player.sendActionBar(
                                 Component.text()
-                                    .append(Component.text("!", NamedTextColor.RED, TextDecoration.BOLD))
-                                    .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
-                                    .append(
-                                        Component.text(
-                                            player.username,
-                                            TextColor.color(player.color.color),
-                                            TextDecoration.BOLD
-                                        )
-                                    )
-                                    .append(
-                                        Component.text(
-                                            " is standing on the diamond block!\n",
-                                            NamedTextColor.GRAY
-                                        )
-                                    )
-                                    .append(Component.text("!", NamedTextColor.RED, TextDecoration.BOLD))
-                                    .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
-                                    .append(Component.text("They win in ", NamedTextColor.GRAY))
-                                    .append(Component.text(seconds, NamedTextColor.RED))
-                                    .append(Component.text(" seconds!", NamedTextColor.GRAY))
-                                    .build()
+                                    .append(Component.text("$seconds second${if (seconds != 1) "s" else ""}", NamedTextColor.GOLD))
+                                    .append(Component.text(" left until victory!", NamedTextColor.GRAY))
                             )
                         }
 
-                        if (seconds <= 5) {
-                            playSound(
-                                Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_PLING, Sound.Source.MASTER, 1f, 1f),
-                                Sound.Emitter.self()
-                            )
-
-                            showTitle(
-                                Title.title(
-                                    Component.text(
-                                        seconds,
-                                        lerp(seconds / 5f, NamedTextColor.RED, NamedTextColor.GREEN)
-                                    ),
-                                    Component.empty(),
-                                    Title.Times.of(Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(1))
-                                )
-                            )
+                        override fun cancelled() {
+                            victory(player, VictoryType.DIAMOND_BLOCK)
                         }
-
-                        player.playSound(
-                            Sound.sound(
-                                SoundEvent.ENTITY_EXPERIENCE_ORB_PICKUP,
-                                Sound.Source.MASTER,
-                                0.25f,
-                                seconds * 0.1f
-                            )
-                        )
-                        player.sendActionBar(
-                            Component.text()
-                                .append(
-                                    Component.text(
-                                        "$seconds second${if (seconds != 1) "s" else ""}",
-                                        NamedTextColor.GOLD
-                                    )
-                                )
-                                .append(Component.text(" left until victory!", NamedTextColor.GRAY))
-                        )
                     }
                 }
             }
@@ -390,19 +404,6 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     override fun gameStarted() {
         // TODO: TNT Rain(?)
         // TODO: Sky border
-
-        val batch = AbsoluteBlockBatch()
-        for (y in 215..229) {
-            for (x in -15..15) {
-                batch.setBlock(x, y, 0, Block.WHITE_WOOL)
-            }
-            for (z in -15..15) {
-                batch.setBlock(0, y, z, Block.WHITE_WOOL)
-            }
-        }
-        batch.setBlock(0, 229, 0, Block.DIAMOND_BLOCK)
-
-        batch.apply(instance) {}
 
         itemLoopTask = Manager.scheduler.buildTask {
             val powerup = Powerup.randomWithRarity(SpawnType.MIDDLE).createItemStack()
@@ -462,13 +463,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             .repeat(Duration.ofSeconds(50))
             .schedule()
 
-        //startTime = System.currentTimeMillis()
-
-        startingTask = null
-        gameState = GameState.PLAYING
-
         players.forEach(::respawn)
-
     }
 
     override fun playerDied(player: Player, killer: Entity?) {
@@ -476,7 +471,6 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             player.teleport(spawnPos)
             return
         }
-        player.closeInventory()
         player.playSound(Sound.sound(SoundEvent.ENTITY_VILLAGER_DEATH, Sound.Source.PLAYER, 1f, 1f))
         player.setCanPickupItem(false)
         player.inventory.clear()
@@ -488,7 +482,14 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             killer.kills++
             updateScoreboard(killer)
 
-            sendMiniMessage("<red>☠</red> <dark_gray>|</dark_gray> <gray><red>${player.username}</red> was killed by <white>${killer.username}</white>")
+            sendMessage(
+                Component.text()
+                    .append(Component.text("☠", NamedTextColor.RED))
+                    .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
+                    .append(Component.text(player.username, NamedTextColor.RED))
+                    .append(Component.text(" was killed by ", NamedTextColor.GRAY))
+                    .append(Component.text(killer.username, NamedTextColor.WHITE))
+            )
 
             player.showTitle(
                 Title.title(
@@ -502,7 +503,13 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
         } else {
 
-            sendMiniMessage("<red>☠</red> <dark_gray>|</dark_gray> <gray><red>${player.username}</red> died")
+            sendMessage(
+                Component.text()
+                    .append(Component.text("☠", NamedTextColor.RED))
+                    .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
+                    .append(Component.text(player.username, NamedTextColor.RED))
+                    .append(Component.text(" died", NamedTextColor.GRAY))
+            )
 
             player.showTitle(
                 Title.title(
@@ -528,25 +535,31 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
         updateScoreboard(player)
 
-        destroyTasks.add(task(wait = Duration.ofSeconds(2), repeat = Duration.ofSeconds(1), finalIteration = { respawn(player) }) { _, i ->
-            if (i == 3) {
-                if (killer != null && killer != player) player.spectate(killer)
-            }
+        destroyTasks.add(object : MinestomRunnable(delay = Duration.ofSeconds(2), repeat = Duration.ofSeconds(1), iterations = 3, timer = timer) {
+            override fun run() {
+                if (currentIteration == 0) {
+                    if (killer != null && killer != player) player.spectate(killer)
+                }
 
-            val pos = killer?.position ?: player.position
-            player.playSound(
-                Sound.sound(SoundEvent.BLOCK_WOODEN_BUTTON_CLICK_ON, Sound.Source.BLOCK, 1f, 1f),
-                pos
-            )
-            player.showTitle(
-                Title.title(
-                    Component.text(i, NamedTextColor.GOLD, TextDecoration.BOLD),
-                    Component.empty(),
-                    Title.Times.of(
-                        Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(1)
+                val pos = killer?.position ?: player.position
+                player.playSound(
+                    Sound.sound(SoundEvent.BLOCK_WOODEN_BUTTON_CLICK_ON, Sound.Source.BLOCK, 1f, 1f),
+                    pos
+                )
+                player.showTitle(
+                    Title.title(
+                        Component.text(iterations - currentIteration, NamedTextColor.GOLD, TextDecoration.BOLD),
+                        Component.empty(),
+                        Title.Times.of(
+                            Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(1)
+                        )
                     )
                 )
-            )
+            }
+
+            override fun cancelled() {
+                respawn(player)
+            }
         })
 
     }
@@ -571,6 +584,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         gameState = GameState.ENDING
 
         itemLoopTask?.cancel()
+        invItemLoopTask?.cancel()
 
         instance.entities
             .filter { it !is Player }
@@ -638,6 +652,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
         diamondBlockTask?.cancel()
         itemLoopTask?.cancel()
+        invItemLoopTask?.cancel()
 
         players.forEach {
             it.cleanup()
@@ -685,7 +700,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     override fun instanceCreate(): Instance {
         val dimension = Manager.dimensionType.getDimension(NamespaceID.from("fullbright"))!!
         val instance = Manager.instance.createInstanceContainer(dimension)
-        //instance.chunkLoader = AnvilLoader("forest")
+        instance.chunkLoader = AnvilLoader("forest")
 
         return instance
     }

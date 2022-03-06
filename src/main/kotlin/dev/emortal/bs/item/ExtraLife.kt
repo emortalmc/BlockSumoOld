@@ -1,7 +1,7 @@
 package dev.emortal.bs.item
 
 import dev.emortal.bs.game.BlockSumoGame
-import dev.emortal.bs.game.lives
+import dev.emortal.bs.game.BlockSumoPlayerHelper.lives
 import dev.emortal.immortal.game.GameManager.game
 import net.kyori.adventure.sound.Sound
 import net.minestom.server.coordinate.Pos
