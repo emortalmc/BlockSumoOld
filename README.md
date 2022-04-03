@@ -1,19 +1,12 @@
-# BLOCK SUMO
+# Block Sumo
 
-### What is Block Sumo?
+Block Sumo is a gamemode with the sole objective of pushing others to their deaths
 
-Block Sumo is a gamemode with the sole objective of pushing others to their deaths.
+Consider the builds just as unstable as the gamemode, the latest build is located on the [releases page](https://github.com/emortalmc/blocksumo/releases)
 
-The latest build is located at the '[main](https://github.com/emortalmc/blocksumo/tree/main)' branch.
-
-There isn't yet a dedicated branch for unstable builds, so consider 'main' to be unstable also.
-
-Releases marked with 'RELEASE' are considered stable and production ready.
-
-### External software used  
-  
-Good Ol' [Minestom](https://github.com/Minestom/Minestom)
+### Requirements
+- [Immortal](https://github.com/EmortalMC/Immortal)
 
 ### License
 
-This project uses the GNU AGPL 3.0 License.
+This project uses the GNU AGPL 3.0 license
