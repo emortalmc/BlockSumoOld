@@ -2,7 +2,7 @@
 
 ### What is Block Sumo?
 
-Block Sumo is another gamemode made using Minestom with the sole objective of pushing others to their deaths.
+Block Sumo is a gamemode with the sole objective of pushing others to their deaths.
 
 The latest build is located at the '[main](https://github.com/emortalmc/blocksumo/tree/main)' branch.
 
