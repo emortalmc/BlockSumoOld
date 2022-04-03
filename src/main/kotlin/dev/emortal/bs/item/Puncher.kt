@@ -10,23 +10,28 @@ import net.minestom.server.entity.Player
 import net.minestom.server.item.Enchantment
 import net.minestom.server.item.Material
 import net.minestom.server.sound.SoundEvent
+import world.cepi.kstom.util.playSound
 
-object KnockbackStick : Powerup(
-    Component.text("Knockback Stick", NamedTextColor.RED),
-    "kbstick",
-    Material.STICK,
+object Puncher : Powerup(
+    Component.text("Puncher", NamedTextColor.RED),
+    "puncher",
+    Material.BLAZE_ROD,
     Rarity.RARE,
     PowerupInteractType.ATTACK,
-    SpawnType.EVERYWHERE,
+    SpawnType.MIDDLE,
     {
-        it.enchantment(Enchantment.KNOCKBACK, 2)
+        it.enchantment(Enchantment.KNOCKBACK, Byte.MAX_VALUE.toShort())
     }
 ) {
 
     override fun use(game: BlockSumoGame, player: Player, pos: Pos?, entity: Entity?) {
         removeOne(player)
 
-        player.playSound(Sound.sound(SoundEvent.ENTITY_ITEM_BREAK, Sound.Source.PLAYER, 1f, 1f))
+        game.playSound(Sound.sound(SoundEvent.ENTITY_PLAYER_ATTACK_CRIT, Sound.Source.PLAYER, 1f, 1f), player.position)
+
+        if (entity != null) {
+            entity.velocity = player.position.direction().mul(100.0)
+        }
 
     }
 

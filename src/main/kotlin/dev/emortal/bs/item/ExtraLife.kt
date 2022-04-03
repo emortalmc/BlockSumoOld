@@ -2,7 +2,6 @@ package dev.emortal.bs.item
 
 import dev.emortal.bs.game.BlockSumoGame
 import dev.emortal.bs.game.BlockSumoPlayerHelper.lives
-import dev.emortal.immortal.game.GameManager.game
 import net.kyori.adventure.sound.Sound
 import net.minestom.server.coordinate.Pos
 import net.minestom.server.entity.Entity
@@ -20,11 +19,11 @@ object ExtraLife : Powerup(
     SpawnType.MIDDLE
 ) {
 
-    override fun use(player: Player, pos: Pos?, entity: Entity?) {
+    override fun use(game: BlockSumoGame, player: Player, pos: Pos?, entity: Entity?) {
         removeOne(player)
 
         player.lives++
-        (player.game as BlockSumoGame).updateScoreboard(player)
+        game.updateScoreboard(player)
         player.playSound(Sound.sound(SoundEvent.ENTITY_PLAYER_LEVELUP, Sound.Source.PLAYER, 1f, 1f))
     }
 

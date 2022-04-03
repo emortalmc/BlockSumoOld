@@ -1,23 +1,34 @@
 package dev.emortal.bs.game
 
 import dev.emortal.bs.entity.FishingBobber
+import dev.emortal.bs.event.Event
 import dev.emortal.bs.game.BlockSumoPlayerHelper.canBeHit
 import dev.emortal.bs.game.BlockSumoPlayerHelper.cleanup
 import dev.emortal.bs.game.BlockSumoPlayerHelper.color
+import dev.emortal.bs.game.BlockSumoPlayerHelper.finalKills
+import dev.emortal.bs.game.BlockSumoPlayerHelper.hasSpawnProtection
 import dev.emortal.bs.game.BlockSumoPlayerHelper.kills
 import dev.emortal.bs.game.BlockSumoPlayerHelper.lastDamageTimestamp
 import dev.emortal.bs.game.BlockSumoPlayerHelper.lives
+import dev.emortal.bs.game.BlockSumoPlayerHelper.spawnProtectionMillis
 import dev.emortal.bs.item.Powerup
 import dev.emortal.bs.item.Powerup.Companion.heldPowerup
 import dev.emortal.bs.item.PowerupInteractType
 import dev.emortal.bs.item.Shears
 import dev.emortal.bs.item.SpawnType
+import dev.emortal.bs.util.SphereUtil
 import dev.emortal.bs.util.showFirework
-import dev.emortal.immortal.game.*
+import dev.emortal.bs.util.showFireworkWithDuration
+import dev.emortal.immortal.config.GameOptions
+import dev.emortal.immortal.game.GameState
+import dev.emortal.immortal.game.PvpGame
+import dev.emortal.immortal.game.Team
 import dev.emortal.immortal.util.MinestomRunnable
+import dev.emortal.immortal.util.armify
 import dev.emortal.immortal.util.reset
 import dev.emortal.immortal.util.takeKnockback
 import net.kyori.adventure.sound.Sound
+import net.kyori.adventure.sound.Sound.Emitter
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextColor
@@ -45,36 +56,48 @@ import net.minestom.server.instance.Instance
 import net.minestom.server.instance.batch.AbsoluteBlockBatch
 import net.minestom.server.instance.block.Block
 import net.minestom.server.item.ItemStack
+import net.minestom.server.item.Material
 import net.minestom.server.item.firework.FireworkEffect
 import net.minestom.server.item.firework.FireworkEffectType
-import net.minestom.server.message.Messenger.sendMessage
+import net.minestom.server.item.metadata.LeatherArmorMeta
 import net.minestom.server.network.packet.server.play.EffectPacket
 import net.minestom.server.network.packet.server.play.TeamsPacket
 import net.minestom.server.scoreboard.Sidebar
 import net.minestom.server.sound.SoundEvent
-import net.minestom.server.timer.Task
 import net.minestom.server.utils.Direction
 import net.minestom.server.utils.NamespaceID
 import world.cepi.kstom.Manager
-import world.cepi.kstom.adventure.sendMiniMessage
 import world.cepi.kstom.event.listenOnly
+import world.cepi.kstom.item.item
 import world.cepi.kstom.util.asPos
+import world.cepi.kstom.util.asVec
 import world.cepi.kstom.util.playSound
 import world.cepi.kstom.util.roundToBlock
+import world.cepi.particle.Particle
+import world.cepi.particle.ParticleType
+import world.cepi.particle.data.OffsetAndSpeed
+import world.cepi.particle.showParticle
 import java.time.Duration
+import java.util.*
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ThreadLocalRandom
+import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
 class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
-    val spawnPos = Pos(0.5, 230.0, 0.5)
+    val spawnPos = Pos(0.5, 65.0, 0.5)
 
-    val destroyTasks = mutableListOf<MinestomRunnable>()
-    var itemLoopTask: Task? = null
-    var invItemLoopTask: Task? = null
     var diamondBlockTask: MinestomRunnable? = null
     var diamondBlockPlayer: Player? = null
+
+    val respawnTasks = ConcurrentHashMap<UUID, MinestomRunnable>()
+
+    var borderSize = 40.0
+
+    var eventTask: MinestomRunnable? = null
+    var currentEvent: Event? = null
 
     fun updateScoreboard(player: Player) {
         val livesColor = if (player.lives > 5) NamedTextColor.LIGHT_PURPLE
@@ -82,6 +105,10 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             lerp((player.lives - 1) / 4f, NamedTextColor.RED, NamedTextColor.GREEN)
         }
 
+        if (player.team == null) {
+            val newTeam = Team(player.username, player.color.color, TeamsPacket.CollisionRule.NEVER)
+            newTeam.add(player)
+        }
         player.team.updateSuffix(
             Component.text().append(Component.text(" - ", NamedTextColor.GRAY))
                 .append(Component.text(player.lives, livesColor, TextDecoration.BOLD)).build()
@@ -102,7 +129,13 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
     override fun playerJoin(player: Player) {
 
-        player.color = TeamColor.values().random()
+        player.color = when (player.username) {
+            "GoldenStack" -> TeamColor.GOLD
+            "Iternalplayer" -> TeamColor.RED
+
+            else -> TeamColor.values().random()
+        }
+
 
         val newTeam = Team(player.username, player.color.color, TeamsPacket.CollisionRule.NEVER)
         newTeam.add(player)
@@ -112,6 +145,35 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         )
 
         registerTeam(newTeam)
+
+        if (player.username == "emortaldev") {
+            object : MinestomRunnable(coroutineScope = coroutineScope, repeat = Duration.ofMillis(100)) {
+                var rainbow = 0f
+                override suspend fun run() {
+                    rainbow += 0.05f
+                    if (rainbow >= 1f) {
+                        rainbow = 0f
+                    }
+
+                    player.helmet = item(Material.LEATHER_HELMET) {
+                        this as LeatherArmorMeta.Builder
+                        this.color(Color(java.awt.Color.HSBtoRGB(rainbow, 1f, 1f)))
+                    }
+                    player.chestplate = item(Material.LEATHER_CHESTPLATE) {
+                        this as LeatherArmorMeta.Builder
+                        this.color(Color(java.awt.Color.HSBtoRGB((rainbow + 0.1f) % 1f, 1f, 1f)))
+                    }
+                    player.leggings = item(Material.LEATHER_LEGGINGS) {
+                        this as LeatherArmorMeta.Builder
+                        this.color(Color(java.awt.Color.HSBtoRGB((rainbow + 0.2f) % 1f, 1f, 1f)))
+                    }
+                    player.boots = item(Material.LEATHER_BOOTS) {
+                        this as LeatherArmorMeta.Builder
+                        this.color(Color(java.awt.Color.HSBtoRGB((rainbow + 0.3f) % 1f, 1f, 1f)))
+                    }
+                }
+            }
+        }
 
         player.displayName = Component.text()
             .append(Component.text(player.username, TextColor.color(player.color.color)))
@@ -134,6 +196,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     }
 
     override fun playerLeave(player: Player) {
+        respawnTasks[player.uuid]?.cancelImmediate()
         player.cleanup()
 
         teams.firstOrNull { it.teamName == player.username }?.destroy()
@@ -157,9 +220,19 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         listenOnly<PlayerBlockPlaceEvent> {
             consumeBlock(false)
 
-            if (blockPosition.distanceSquared(spawnPos.sub(0.5, 0.0, 0.5)) < 6) {
-                destroyTasks.add(object : MinestomRunnable(delay = Duration.ofSeconds(5), timer = timer) {
-                    override fun run() {
+            if (blockPosition.distanceSquared(player.position) > 6*6) {
+                isCancelled = true
+                return@listenOnly
+            }
+
+            if (blockPosition.y() > 90 || blockPosition.y() < 51.5) {
+                isCancelled = true
+                return@listenOnly
+            }
+
+            if (blockPosition.distanceSquared(spawnPos.sub(0.5, 0.0, 0.5)) < 3*3) {
+                object : MinestomRunnable(delay = Duration.ofSeconds(5), coroutineScope = coroutineScope) {
+                    override suspend fun run() {
                         instance.setBlock(blockPosition, Block.AIR)
                         // Send the block break effect packet
                         sendGroupedPacket(
@@ -171,7 +244,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                             )
                         )
                     }
-                })
+                }
             }
 
             if (player.inventory.itemInMainHand.material.name().endsWith("wool", ignoreCase = true)) {
@@ -179,6 +252,8 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
                 if (isNextToBarrier(player.instance!!, blockPosition)) {
                     isCancelled = true
+                    player.teleport(player.position.sub(0.0, 1.0, 0.0))
+                    player.velocity = Vec(0.0, -20.0, 0.0)
                     return@listenOnly
                 }
 
@@ -190,7 +265,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             val heldItem = player.heldPowerup ?: return@listenOnly
             if (heldItem.interactType != PowerupInteractType.PLACE && heldItem.interactType != PowerupInteractType.USE) return@listenOnly
 
-            heldItem.use(player, blockPosition.add(0.5, 0.1, 0.5).asPos())
+            heldItem.use(this@BlockSumoGame, player, blockPosition.add(0.5, 0.1, 0.5).asPos())
         }
 
         listenOnly<PlayerBlockBreakEvent> {
@@ -219,7 +294,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 val y = player.position.y + 1
                 val z = player.position.z - zDir * 0.3
 
-                val bobberEntity = FishingBobber(player)
+                val bobberEntity = FishingBobber(player, this@BlockSumoGame)
                 bobberEntity.setInstance(player.instance!!, Pos(x, y, z))
                 bobberEntity.throwBobber()
 
@@ -228,7 +303,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
             if (heldItem.interactType != PowerupInteractType.USE) return@listenOnly
 
-            heldItem.use(player, null)
+            heldItem.use(this@BlockSumoGame, player, null)
         }
 
         listenOnly<PlayerUseItemOnBlockEvent> {
@@ -238,7 +313,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             val heldItem = player.heldPowerup ?: return@listenOnly
             if (heldItem.interactType != PowerupInteractType.USE) return@listenOnly
 
-            heldItem.use(player, null)
+            heldItem.use(this@BlockSumoGame, player, null)
         }
 
         listenOnly<EntityAttackEvent> {
@@ -251,13 +326,16 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
             val entity = target as Player
 
-            if (!entity.canBeHit) return@listenOnly
-            if (attacker.getDistance(target) > 4) return@listenOnly
+            attacker.spawnProtectionMillis = 0
+            if (!entity.canBeHit || entity.hasSpawnProtection) return@listenOnly
+            if (attacker.getDistanceSquared(target) > 4*4) return@listenOnly
             entity.canBeHit = false
+
+
 
             val heldItem = attacker.heldPowerup
             if (heldItem != null && heldItem.interactType == PowerupInteractType.ATTACK) {
-                heldItem.use(attacker, null)
+                heldItem.use(this@BlockSumoGame, attacker, null, target)
             }
 
             entity.damage(DamageType.fromPlayer(attacker), 0f)
@@ -275,47 +353,52 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         }
 
         listenOnly<PickupItemEvent> {
-            if (entity is Player) {
-                if ((entity as Player).gameMode != GameMode.SURVIVAL) return@listenOnly
-                isCancelled = !(entity as Player).inventory.addItemStack(itemEntity.itemStack)
-                if (!isCancelled) {
-                    (entity as Player).playSound(
-                        Sound.sound(
-                            SoundEvent.ENTITY_ITEM_PICKUP,
-                            Sound.Source.PLAYER,
-                            1f,
-                            1f
-                        )
+            val player = entity as? Player ?: return@listenOnly
+
+            if (player.gameMode != GameMode.SURVIVAL) return@listenOnly
+            isCancelled = !player.inventory.addItemStack(itemEntity.itemStack)
+            if (!isCancelled) {
+                player.playSound(
+                    Sound.sound(
+                        SoundEvent.ENTITY_ITEM_PICKUP,
+                        Sound.Source.PLAYER,
+                        1f,
+                        1f
                     )
-                }
+                )
             }
+        }
+
+        listenOnly<PlayerBlockInteractEvent> {
+            this.blockPosition
         }
 
         listenOnly<PlayerTickEvent> {
             if (player.gameMode != GameMode.SURVIVAL) {
-                if (player.position.y() < 50) player.teleport(spawnPos)
+                if (player.position.y() < -64) player.teleport(spawnPos)
                 return@listenOnly
             }
 
-            val borderSize = 20
-
             var killer: Entity? = null
-            if (player.lastDamageTimestamp < System.currentTimeMillis() + 8000 && player.lastDamageSource != null) {
+            if (player.lastDamageTimestamp + 8000 > System.currentTimeMillis() && player.lastDamageSource != null) {
                 killer = when (val lastDamageSource = player.lastDamageSource) {
                     is EntityDamage -> lastDamageSource.source
                     is EntityProjectileDamage -> lastDamageSource.shooter
                     else -> null
                 }
             }
+            if (killer == player) killer = null
 
-            if (player.position.x() > borderSize || player.position.x() < -borderSize) {
+            val expandedBorder = (borderSize/2) + 1.5
+
+            if (player.position.x() > expandedBorder || player.position.x() < -expandedBorder) {
                 kill(player, killer)
             }
-            if (player.position.z() > borderSize || player.position.z() < -borderSize) {
+            if (player.position.z() > expandedBorder || player.position.z() < -expandedBorder) {
                 kill(player, killer)
             }
 
-            if (player.position.y() < 217) {
+            if (player.position.y() < 51.5 || player.position.y() > 149) {
                 kill(player, killer)
             }
 
@@ -337,9 +420,9 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 if (isOnDiamondBlock) {
                     diamondBlockPlayer = player
 
-                    diamondBlockTask = object : MinestomRunnable(repeat = Duration.ofSeconds(1), iterations = 20, timer = timer) {
-                        override fun run() {
-                            val seconds = iterations - currentIteration
+                    diamondBlockTask = object : MinestomRunnable(repeat = Duration.ofSeconds(1), iterations = 20, coroutineScope = coroutineScope) {
+                        override suspend fun run() {
+                            val seconds = iterations - currentIteration.get()
 
                             if (seconds % 5 == 0 && seconds <= 15) {
                                 playSound(
@@ -393,7 +476,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                         }
 
                         override fun cancelled() {
-                            victory(player, VictoryType.DIAMOND_BLOCK)
+                            victory(player)
                         }
                     }
                 }
@@ -405,63 +488,116 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         // TODO: TNT Rain(?)
         // TODO: Sky border
 
-        itemLoopTask = Manager.scheduler.buildTask {
-            val powerup = Powerup.randomWithRarity(SpawnType.MIDDLE).createItemStack()
-            val itemEntity = ItemEntity(powerup)
-            val itemEntityMeta = itemEntity.entityMeta
+        scoreboard?.removeLine("infoLine")
 
-            itemEntityMeta.item = powerup
-            itemEntityMeta.customName = powerup.displayName
-            itemEntityMeta.isCustomNameVisible = true
+        eventTask =
+            object : MinestomRunnable(coroutineScope = coroutineScope, repeat = Duration.ofSeconds(120), delay = Duration.ofSeconds(120)) {
+                override suspend fun run() {
+                    val randomEvent = Event.createRandomEvent()
 
-            itemEntity.setInstance(instance, spawnPos.add(0.0, 1.0, 0.0))
+                    currentEvent = randomEvent
 
-            sendMessage(
-                Component.text()
-                    .append(Component.text("★", NamedTextColor.GREEN))
-                    .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
-                    .append(powerup.displayName!!)
-                    .append(Component.text(" has spawned at middle!", NamedTextColor.GRAY))
-                    .build()
-            )
-
-            showFirework(
-                instance, spawnPos.add(0.0, 1.0, 0.0), mutableListOf(
-                    FireworkEffect(
-                        false,
-                        false,
-                        FireworkEffectType.SMALL_BALL,
-                        mutableListOf(Color(255, 100, 0)),
-                        mutableListOf(Color(255, 0, 255))
-                    )
-                )
-            )
-        }
-            .delay(Duration.ofSeconds(5))
-            .repeat(Duration.ofSeconds(30))
-            .schedule()
-
-        invItemLoopTask = Manager.scheduler.buildTask {
-            val powerup = Powerup.randomWithRarity(SpawnType.EVERYWHERE)
-
-            players.forEach {
-                it.inventory.addItemStack(powerup.createItemStack())
+                    randomEvent.performEvent(this@BlockSumoGame)
+                }
             }
 
-            sendMessage(
-                Component.text()
-                    .append(Component.text("★", NamedTextColor.GREEN))
-                    .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
-                    .append(powerup.name)
-                    .append(Component.text(" has been given to everyone!", NamedTextColor.GRAY))
-                    .build()
-            )
+        // Border task
+        object : MinestomRunnable(coroutineScope = coroutineScope, delay = Duration.ofMinutes(3), repeat = Duration.ofSeconds(5)) {
+            var startTimestamp: Long = 0
+            val timeToSmall = 3 * 60 * 1000L
+            var setBorder = false
+            val originalBorderSize = borderSize
 
-            playSound(Sound.sound(SoundEvent.ENTITY_ITEM_PICKUP, Sound.Source.PLAYER, 1f, 1f))
+            override suspend fun run() {
+                if (!setBorder) {
+                    setBorder = true
+                    instance.worldBorder.setCenter(0.5f, 0.5f)
+                    instance.worldBorder.setDiameter(originalBorderSize)
+                    instance.worldBorder.warningBlocks = 5
+                    instance.worldBorder.setDiameter(7.0, timeToSmall)
+                    startTimestamp = System.currentTimeMillis()
+
+                    sendMessage(
+                        Component.text()
+                            .append(Component.text("☠", NamedTextColor.GOLD))
+                            .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
+                            .append(Component.text("The border has been activated!", NamedTextColor.GOLD))
+                    )
+
+                    playSound(
+                        Sound.sound(
+                            SoundEvent.ENTITY_ENDER_DRAGON_GROWL,
+                            Sound.Source.MASTER,
+                            0.7f,
+                            1.2f
+                        )
+                    )
+                }
+
+                borderSize = dev.emortal.immortal.util.lerp(7f, originalBorderSize.toFloat(), 1-((System.currentTimeMillis() - startTimestamp).toFloat() / timeToSmall.toFloat())).toDouble()
+            }
         }
-            .delay(Duration.ofSeconds(5))
-            .repeat(Duration.ofSeconds(50))
-            .schedule()
+
+        // Item loop task
+        object : MinestomRunnable(coroutineScope = coroutineScope, delay = Duration.ofSeconds(10), repeat = Duration.ofSeconds(30)) {
+            override suspend fun run() {
+                val powerup = Powerup.randomWithRarity(SpawnType.MIDDLE).createItemStack()
+                val itemEntity = ItemEntity(powerup)
+                val itemEntityMeta = itemEntity.entityMeta
+
+                itemEntityMeta.item = powerup
+                itemEntityMeta.customName = powerup.displayName
+                itemEntityMeta.isCustomNameVisible = true
+                itemEntity.velocity = Vec(0.0, 7.0, 0.0)
+
+                itemEntity.setInstance(instance, spawnPos)
+
+                sendMessage(
+                    Component.text()
+                        .append(Component.text("★", NamedTextColor.GREEN))
+                        .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
+                        .append(powerup.displayName!!)
+                        .append(Component.text(" has spawned at middle!", NamedTextColor.GRAY))
+                        .build()
+                )
+
+                players.showFirework(
+                    instance, spawnPos.add(0.0, 1.0, 0.0), mutableListOf(
+                        FireworkEffect(
+                            false,
+                            false,
+                            FireworkEffectType.SMALL_BALL,
+                            mutableListOf(Color(255, 100, 0)),
+                            mutableListOf(Color(255, 0, 255))
+                        )
+                    )
+                )
+            }
+        }
+
+        // Inv item loop task
+        object : MinestomRunnable(coroutineScope = coroutineScope, delay = Duration.ofSeconds(5), repeat = Duration.ofSeconds(45)){
+            override suspend fun run() {
+                val powerup = Powerup.randomWithRarity(SpawnType.EVERYWHERE)
+
+                players
+                    .filter { it.gameMode == GameMode.SURVIVAL }
+                    .forEach {
+                        it.inventory.addItemStack(powerup.createItemStack())
+                    }
+
+                sendMessage(
+                    Component.text()
+                        .append(Component.text("★", NamedTextColor.YELLOW))
+                        .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
+                        .append(powerup.name)
+                        .append(Component.text(" has been given to everyone!", NamedTextColor.GRAY))
+                        .build()
+                )
+
+                playSound(Sound.sound(SoundEvent.ENTITY_ITEM_PICKUP, Sound.Source.PLAYER, 1f, 1f))
+            }
+        }
 
         players.forEach(::respawn)
     }
@@ -471,53 +607,76 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             player.teleport(spawnPos)
             return
         }
-        player.playSound(Sound.sound(SoundEvent.ENTITY_VILLAGER_DEATH, Sound.Source.PLAYER, 1f, 1f))
+        player.playSound(Sound.sound(SoundEvent.ENTITY_VILLAGER_DEATH, Sound.Source.PLAYER, 1f, 1f), Emitter.self())
         player.setCanPickupItem(false)
         player.inventory.clear()
         player.velocity = Vec(0.0, 0.0, 0.0)
 
         player.lives--
 
-        if (killer != null && killer is Player) {
-            killer.kills++
-            updateScoreboard(killer)
+        val actualKiller = if (killer is Player) {
+            val shooterTag = killer.getTag(Powerup.entityShooterTag)
+            if (shooterTag != null) {
+                players.firstOrNull { it.username == shooterTag } ?: killer
+            } else killer
+        } else {
+            killer
+        }
 
-            sendMessage(
-                Component.text()
-                    .append(Component.text("☠", NamedTextColor.RED))
-                    .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
-                    .append(Component.text(player.username, NamedTextColor.RED))
-                    .append(Component.text(" was killed by ", NamedTextColor.GRAY))
-                    .append(Component.text(killer.username, NamedTextColor.WHITE))
+        var message: Component = Component.empty()
+        var victimTitle: Title? = null
+
+        if (actualKiller != null && actualKiller is Player) {
+            actualKiller.kills++
+            updateScoreboard(actualKiller)
+
+            actualKiller.playSound(Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_PLING, Sound.Source.PLAYER, 1f, 1f), Emitter.self())
+
+            message = Component.text()
+                .append(Component.text("☠", NamedTextColor.RED))
+                .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
+                .append(Component.text(player.username, NamedTextColor.RED))
+                .append(Component.text(" was killed by ", NamedTextColor.GRAY))
+                .append(Component.text(actualKiller.username, NamedTextColor.WHITE))
+                .build()
+
+            actualKiller.showTitle(
+                Title.title(
+                    Component.empty(),
+                    Component.text()
+                        .append(Component.text("☠ ", NamedTextColor.RED))
+                        .append(Component.text(player.username, NamedTextColor.RED))
+                        .build(),
+                    Title.Times.of(Duration.ZERO, Duration.ofSeconds(1), Duration.ofMillis(500))
+                )
             )
 
-            player.showTitle(
-                Title.title(
-                    Component.text("YOU DIED", NamedTextColor.RED, TextDecoration.BOLD),
-                    Component.empty(),
-                    Title.Times.of(
-                        Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(1)
-                    )
+            victimTitle = Title.title(
+                Component.text("YOU DIED", NamedTextColor.RED, TextDecoration.BOLD),
+                Component.text()
+                    .append(Component.text("Killed by ", NamedTextColor.GRAY))
+                    .append(Component.text(actualKiller.username, NamedTextColor.RED, TextDecoration.BOLD))
+                    .build(),
+                Title.Times.of(
+                    Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(1)
                 )
             )
 
         } else {
 
-            sendMessage(
-                Component.text()
-                    .append(Component.text("☠", NamedTextColor.RED))
-                    .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
-                    .append(Component.text(player.username, NamedTextColor.RED))
-                    .append(Component.text(" died", NamedTextColor.GRAY))
-            )
+            message = Component.text()
+                .append(Component.text("☠", NamedTextColor.RED))
+                .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
+                .append(Component.text(player.username, NamedTextColor.RED))
+                .append(Component.text(" died", NamedTextColor.GRAY))
+                .build()
 
-            player.showTitle(
-                Title.title(
-                    Component.text("YOU DIED", NamedTextColor.RED, TextDecoration.BOLD),
-                    Component.empty(),
-                    Title.Times.of(
-                        Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(1)
-                    )
+
+            victimTitle = Title.title(
+                Component.text("YOU DIED", NamedTextColor.RED, TextDecoration.BOLD),
+                Component.empty(),
+                Title.Times.of(
+                    Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(1)
                 )
             )
 
@@ -527,28 +686,50 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             scoreboard?.removeLine(player.uuid.toString())
             player.team = null
 
-            val alivePlayers = players.filter { it.gameMode == GameMode.SURVIVAL }
-            if (alivePlayers.size == 1) victory(alivePlayers[0])
+            message = Component.text()
+                .append(message)
+                .append(Component.text(" FINAL KILL", NamedTextColor.AQUA, TextDecoration.BOLD))
+                .build()
+
+            val alivePlayers = players.filter { it.lives > 0 }
+            if (alivePlayers.size == 1) victory(alivePlayers.first())
+
+            if (killer != null && killer is Player) {
+                killer.finalKills++
+            }
+
+            sendMessage(message)
+            player.showTitle(Title.title(
+                Component.text("YOU DIED", NamedTextColor.RED, TextDecoration.BOLD),
+                Component.text("(Final kill)", NamedTextColor.DARK_GRAY),
+                Title.Times.of(
+                    Duration.ZERO, Duration.ofSeconds(2), Duration.ofSeconds(1)
+                )
+            ))
 
             return
         }
 
+        sendMessage(message)
+        player.showTitle(victimTitle)
+
         updateScoreboard(player)
 
-        destroyTasks.add(object : MinestomRunnable(delay = Duration.ofSeconds(2), repeat = Duration.ofSeconds(1), iterations = 3, timer = timer) {
-            override fun run() {
-                if (currentIteration == 0) {
-                    if (killer != null && killer != player) player.spectate(killer)
+        respawnTasks[player.uuid] = object : MinestomRunnable(delay = Duration.ofSeconds(2), repeat = Duration.ofSeconds(1), iterations = 4, coroutineScope = coroutineScope) {
+            override suspend fun run() {
+                val currentIter = currentIteration.get()
+                if (currentIter == 0) {
+                    if (actualKiller != null && actualKiller != player) player.spectate(actualKiller)
                 }
 
                 val pos = killer?.position ?: player.position
                 player.playSound(
                     Sound.sound(SoundEvent.BLOCK_WOODEN_BUTTON_CLICK_ON, Sound.Source.BLOCK, 1f, 1f),
-                    pos
+                    Emitter.self()
                 )
                 player.showTitle(
                     Title.title(
-                        Component.text(iterations - currentIteration, NamedTextColor.GOLD, TextDecoration.BOLD),
+                        Component.text(iterations - currentIter, NamedTextColor.GOLD, TextDecoration.BOLD),
                         Component.empty(),
                         Title.Times.of(
                             Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(1)
@@ -560,74 +741,45 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             override fun cancelled() {
                 respawn(player)
             }
-        })
+        }
 
     }
 
     override fun respawn(player: Player) = with(player) {
-        player.reset()
-        gameMode = GameMode.SURVIVAL
-        teleport(getRandomRespawnPosition())
+        reset()
+        teleport(getRandomRespawnPosition()).thenRun {
+            gameMode = GameMode.SURVIVAL
+        }
+
+        player.boots = item(Material.LEATHER_BOOTS) {
+            this as LeatherArmorMeta.Builder
+            this.color(Color(player.color.color))
+        }
+
+        when (username) {
+            "GoldenStack" -> {
+                player.helmet = item(Material.GOLDEN_HELMET)
+                player.chestplate = item(Material.GOLDEN_CHESTPLATE)
+                player.leggings = item(Material.GOLDEN_LEGGINGS)
+                player.boots = item(Material.GOLDEN_BOOTS)
+            }
+        }
+
+        player.playSound(
+            Sound.sound(SoundEvent.BLOCK_BEACON_ACTIVATE, Sound.Source.MASTER, 1f, 2f),
+            Sound.Emitter.self()
+        )
 
         if (gameState == GameState.ENDING) return
 
         canBeHit = true
+        spawnProtectionMillis = 4000
+        lastDamageTimestamp = 0
         setCanPickupItem(true)
 
-        inventory.setItemStack(1, ItemStack.builder(player.color.woolMaterial).amount(64).build())
+        inventory.setItemStack(1, ItemStack.builder(color.woolMaterial).amount(64).build())
         inventory.setItemStack(2, Shears.createItemStack())
 
-    }
-
-    private fun victory(player: Player, victoryType: VictoryType = VictoryType.LAST_STANDING) {
-        if (gameState == GameState.ENDING) return
-        gameState = GameState.ENDING
-
-        itemLoopTask?.cancel()
-        invItemLoopTask?.cancel()
-
-        instance.entities
-            .filter { it !is Player }
-            .forEach(Entity::remove)
-
-        val victoryTitle = Title.title(
-            Component.text("VICTORY!", NamedTextColor.GOLD, TextDecoration.BOLD),
-            Component.text(EndGameQuotes.victory.random(), NamedTextColor.GRAY),
-            Title.Times.of(Duration.ZERO, Duration.ofSeconds(3), Duration.ofSeconds(3))
-        )
-        val defeatTitle = Title.title(
-            Component.text("DEFEAT!", NamedTextColor.RED, TextDecoration.BOLD),
-            Component.text(EndGameQuotes.defeat.random(), NamedTextColor.GRAY),
-            Title.Times.of(Duration.ZERO, Duration.ofSeconds(3), Duration.ofSeconds(3))
-        )
-
-        if (victoryType == VictoryType.DIAMOND_BLOCK) {
-            diamondAllSides(spawnPos.sub(0.0, 1.0, 1.0))
-        }
-
-        players.forEach {
-            it.isInvisible = false
-
-            if (it == player) {
-                it.showTitle(victoryTitle)
-                it.playSound(
-                    Sound.sound(SoundEvent.ENTITY_PLAYER_LEVELUP, Sound.Source.MASTER, 1f, 1f),
-                    Sound.Emitter.self()
-                )
-            } else {
-                it.showTitle(defeatTitle)
-            }
-        }
-
-        val message = Component.text()
-            .append(Component.text("VICTORY", NamedTextColor.GOLD, TextDecoration.BOLD))
-            .append(Component.text("\n${player.username} won the game", NamedTextColor.WHITE))
-            .build()
-
-        sendMessage(message)
-
-        Manager.scheduler.buildTask { destroy() }
-            .delay(Duration.ofSeconds(6)).schedule()
     }
 
     private fun diamondAllSides(pos: Pos) {
@@ -645,14 +797,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     }
 
     override fun gameDestroyed() {
-        destroyTasks.forEach {
-            it.cancel()
-        }
-        destroyTasks.clear()
-
         diamondBlockTask?.cancel()
-        itemLoopTask?.cancel()
-        invItemLoopTask?.cancel()
 
         players.forEach {
             it.cleanup()
@@ -660,21 +805,21 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     }
 
     private fun getRandomRespawnPosition(): Pos {
-        val angle = ThreadLocalRandom.current().nextDouble() * 360
-        val x = cos(angle) * (15 - 2)
-        val z = sin(angle) * (15 - 2)
+        val angle = ThreadLocalRandom.current().nextDouble(2 * PI)
+        val x = cos(angle) * ((borderSize/2) - 6)
+        val z = sin(angle) * ((borderSize/2) - 6)
 
         var pos = spawnPos.add(x, -1.0, z).roundToBlock().add(0.5, 0.0, 0.5)
         val angle1 = spawnPos.sub(pos.x(), pos.y(), pos.z())
 
-        pos = pos.withDirection(angle1).withPitch(90f)
+        pos = pos.withDirection(angle1).withPitch(0f)
 
         instance.setBlock(pos.add(0.0, 1.0, 0.0), Block.AIR)
         instance.setBlock(pos.add(0.0, 2.0, 0.0), Block.AIR)
         instance.setBlock(pos, Block.BEDROCK)
 
         Manager.scheduler.buildTask { instance.setBlock(pos, Block.WHITE_WOOL) }
-            .delay(Duration.ofSeconds(3))
+            .delay(Duration.ofSeconds(4))
             .schedule()
 
         return pos.add(0.0, 1.0, 0.0)
@@ -695,6 +840,123 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         }
 
         return false
+    }
+
+    fun explode(position: Point, explosionSize: Int, explosionForce: Double, explosionForceDistance: Double, breakBlocks: Boolean = true, entity: Entity? = null) {
+        instance.showParticle(
+            Particle.particle(
+                type = ParticleType.EXPLOSION_EMITTER,
+                count = 1,
+                data = OffsetAndSpeed(0f, 0f, 0f, 0f),
+            ),
+            position.asVec()
+        )
+        instance.showParticle(
+            Particle.particle(
+                type = ParticleType.LARGE_SMOKE,
+                count = 20,
+                data = OffsetAndSpeed(0f, 0f, 0f, 0.1f),
+            ),
+            position.asVec()
+        )
+        playSound(
+            Sound.sound(SoundEvent.ENTITY_GENERIC_EXPLODE, Sound.Source.BLOCK, 2f, 1f),
+            position
+        )
+
+        players
+            .filter { it.gameMode == GameMode.SURVIVAL && !it.hasSpawnProtection }
+            .forEach {
+                val distance = it.position.distanceSquared(position)
+                if (distance > explosionForceDistance*explosionForceDistance) return@forEach
+
+                if (entity != null) it.damage(DamageType.fromEntity(entity), 0f)
+
+                it.velocity = it.position
+                    .sub(position)
+                    .asVec()
+                    .normalize()
+                    .mul(explosionForce)
+            }
+
+        if (breakBlocks) {
+            val batch = AbsoluteBlockBatch()
+            val sphereBlocks = SphereUtil.getBlocksInSphere(explosionSize)
+
+            sphereBlocks.forEach {
+                val blockPos = position.add(it.x(), it.y(), it.z())
+                val block = instance.getBlock(blockPos)
+
+                if (!block.name().contains("WOOL", true)) return@forEach
+
+                batch.setBlock(blockPos, Block.AIR)
+            }
+
+            batch.apply(instance) {}
+        }
+    }
+
+    override fun gameWon(winningPlayers: Collection<Player>) {
+        eventTask?.cancel()
+        currentEvent?.eventEnded(this)
+
+        object : MinestomRunnable(repeat = Duration.ofMillis(500), coroutineScope = coroutineScope, iterations = 5*2) {
+            val random = ThreadLocalRandom.current()
+            override suspend fun run() {
+                val effects = mutableListOf(
+                    FireworkEffect(
+                        random.nextBoolean(),
+                        random.nextBoolean(),
+                        FireworkEffectType.values().random(),
+                        listOf(Color(java.awt.Color.HSBtoRGB(random.nextFloat(), 1f, 1f))),
+                        listOf(Color(java.awt.Color.HSBtoRGB(random.nextFloat(), 1f, 1f)))
+                    )
+                )
+
+                val spawnPos = Pos(random.nextDouble(-15.0, 15.0), random.nextDouble(50.0, 70.0), random.nextDouble(-15.0, 15.0))
+                players.showFireworkWithDuration(instance, spawnPos, 20 + random.nextInt(0, 11), effects)
+            }
+        }
+
+        val lastManStanding = winningPlayers.first()
+        val highestKiller = players.maxByOrNull { it.kills }
+
+        for (slot in 0 until lastManStanding.inventory.size) {
+            lastManStanding.inventory.setItemStack(slot, Powerup.registeredMap.values.random().createItemStack())
+        }
+
+        val message = Component.text()
+            .append(Component.text(" ${" ".repeat(25)}VICTORY", NamedTextColor.GOLD, TextDecoration.BOLD))
+            .append(Component.text("\n\n Winner: ", NamedTextColor.GRAY))
+            .append(Component.text(lastManStanding.username, TextColor.color(lastManStanding.color.color)))
+            .also {
+                if (highestKiller != null) {
+                    it.append(Component.text("\n Highest killer: ", NamedTextColor.GRAY))
+                    it.append(Component.text(highestKiller.username, TextColor.color(highestKiller.color.color)))
+                }
+            }
+
+        message.append(Component.newline())
+
+        players.sortedBy { it.kills }.reversed().take(5).forEach { plr ->
+            message.append(
+                Component.text()
+                    .append(Component.newline())
+                    .append(Component.space())
+                    .append(Component.text(plr.username, TextColor.color(plr.color.color)))
+                    .append(Component.text(" - ", NamedTextColor.DARK_GRAY))
+                    .append(Component.text(plr.kills, NamedTextColor.WHITE))
+                    .also {
+                        if (plr.finalKills != 0) {
+                            it.append(Component.text(" (Final kills: ", NamedTextColor.DARK_GRAY))
+                            it.append(Component.text(plr.finalKills, NamedTextColor.AQUA))
+                            it.append(Component.text(")", NamedTextColor.DARK_GRAY))
+                        }
+                    }
+            )
+        }
+
+        sendMessage(message.armify())
     }
 
     override fun instanceCreate(): Instance {

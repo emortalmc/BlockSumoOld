@@ -1,5 +1,6 @@
 package dev.emortal.bs.item
 
+import dev.emortal.bs.game.BlockSumoGame
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextDecoration
 import net.minestom.server.coordinate.Pos
@@ -23,7 +24,9 @@ sealed class Powerup(
 ) : Item(id, material, rarity, itemCreate) {
 
     companion object {
-        val taskIDTag = Tag.Integer("taskID")
+        //val taskIDTag = Tag.Integer("taskID")
+
+        val entityShooterTag = Tag.String("entityShooter")
 
         var Player.heldPowerup: Powerup?
             get() = itemInMainHand.getPowerup
@@ -43,10 +46,7 @@ sealed class Powerup(
         fun randomWithRarity(spawnType: SpawnType): Powerup {
             val possiblePowerups =
                 registeredMap.values.filter { it.rarity != Rarity.IMPOSSIBLE && it.spawnType == spawnType }
-            var totalWeight = 0
-            for (powerup in possiblePowerups) {
-                totalWeight += powerup.rarity.weight
-            }
+            val totalWeight = possiblePowerups.sumOf { it.rarity.weight }
 
             var idx = 0
 
@@ -61,8 +61,8 @@ sealed class Powerup(
         }
     }
 
-    abstract fun use(player: Player, pos: Pos?, entity: Entity? = null)
-    open fun collide(entity: Entity) {
+    abstract fun use(game: BlockSumoGame, player: Player, pos: Pos?, entity: Entity? = null)
+    open fun collide(game: BlockSumoGame, entity: Entity) {
 
     }
 

@@ -1,11 +1,11 @@
 package dev.emortal.bs.item
 
 import dev.emortal.bs.game.BlockSumoGame
-import dev.emortal.bs.util.SphereUtil
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.minestom.server.coordinate.Pos
+import net.minestom.server.coordinate.Vec
 import net.minestom.server.entity.Entity
 import net.minestom.server.entity.EntityType
 import net.minestom.server.entity.Player
@@ -16,16 +16,14 @@ import net.minestom.server.utils.time.TimeUnit
 import world.cepi.kstom.Manager
 import world.cepi.kstom.util.playSound
 
-object TNT : Powerup(
-    Component.text("TNT", NamedTextColor.RED),
-    "tnt",
-    Material.TNT,
-    Rarity.COMMON,
+object AntiGravityTNT : Powerup(
+    Component.text("Anti-Gravity TNT", NamedTextColor.AQUA),
+    "antitnt",
+    Material.LIGHT_BLUE_CONCRETE_POWDER,
+    Rarity.RARE,
     PowerupInteractType.PLACE,
     SpawnType.EVERYWHERE
 ) {
-
-    val sphere = SphereUtil.getBlocksInSphere(4)
 
     override fun use(game: BlockSumoGame, player: Player, pos: Pos?, entity: Entity?) {
         if (pos == null) {
@@ -37,6 +35,8 @@ object TNT : Powerup(
         val tntEntity = Entity(EntityType.TNT)
         val tntMeta = tntEntity.entityMeta as PrimedTntMeta
         //tntEntity.velocity = Vec(0.0, 10.0, 0.0)
+        tntEntity.setNoGravity(true)
+        tntEntity.velocity = Vec(0.0, 7.0, 0.0)
         tntMeta.fuseTime = 60
 
         tntEntity.setTag(itemIdTag, id)

@@ -1,5 +1,6 @@
 package dev.emortal.bs.entity
 
+import dev.emortal.bs.game.BlockSumoGame
 import dev.emortal.bs.item.Powerup.Companion.heldPowerup
 import dev.emortal.immortal.util.takeKnockback
 import net.minestom.server.coordinate.Vec
@@ -11,14 +12,14 @@ import net.minestom.server.entity.damage.DamageType
 import net.minestom.server.entity.metadata.other.FishingHookMeta
 import net.minestom.server.item.Material
 import java.lang.Math.PI
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.cos
 import kotlin.math.sin
 
 // Thanks to
 // https://github.com/Bloepiloepi/MinestomPvP/blob/master/src/main/java/io/github/bloepiloepi/pvp/projectile/FishingBobber.java
-// for code
 
-class FishingBobber(val shooter: Player) : Entity(EntityType.FISHING_BOBBER) {
+class FishingBobber(val shooter: Player, val game: BlockSumoGame) : Entity(EntityType.FISHING_BOBBER) {
 
     var hookedEntity: Player? = null
         set(value) {
@@ -34,11 +35,10 @@ class FishingBobber(val shooter: Player) : Entity(EntityType.FISHING_BOBBER) {
         }
 
     companion object {
-        val bobbers = hashMapOf<Player, FishingBobber>()
+        val bobbers = ConcurrentHashMap<Player, FishingBobber>()
     }
 
     init {
-        //setGravity(BobberStuffCommand.bobberDragPerTick, BobberStuffCommand.bobberAcceleration)
         ownerEntity = shooter
     }
 
@@ -46,14 +46,15 @@ class FishingBobber(val shooter: Player) : Entity(EntityType.FISHING_BOBBER) {
         if (shouldStopFishing(shooter)) {
             remove()
             ownerEntity = null
+            hookedEntity = null
             bobbers.remove(shooter)
             return
         }
 
         val hitPlayer = instance.entities
             .filterIsInstance<Player>()
-            .filter { it != shooter }
-            .firstOrNull { it.boundingBox.expand(0.25, 0.25, 0.25).intersect(this) }
+            .filter { it != shooter && it.gameMode == GameMode.SURVIVAL }
+            .firstOrNull { it.boundingBox.expand(0.25, 0.25, 0.25).intersectEntity(it.position, this) }
 
         if (hitPlayer != null && hookedEntity == null) {
             hookedEntity = hitPlayer
@@ -65,18 +66,20 @@ class FishingBobber(val shooter: Player) : Entity(EntityType.FISHING_BOBBER) {
 
     fun retract() {
         val powerup = shooter.heldPowerup
-        powerup?.use(shooter, this.position, hookedEntity)
+        powerup?.use(game, shooter, this.position, hookedEntity)
 
         remove()
         ownerEntity = null
+        hookedEntity = null
         bobbers.remove(shooter)
     }
 
     fun throwBobber() {
-        if (bobbers.contains(shooter)) {
+        if (bobbers.containsKey(shooter)) {
             retract()
             return
         }
+        bobbers[shooter]?.retract()
         bobbers[shooter] = this
 
         val playerPos = shooter.position
@@ -90,7 +93,7 @@ class FishingBobber(val shooter: Player) : Entity(EntityType.FISHING_BOBBER) {
             cos(playerYaw / 180.0F * PI) * cos(playerPitch / 180.0F * PI) * maxVelocity
         )
             .normalize()
-            .mul(20.0)
+            .mul(60.0)
 
 
     }

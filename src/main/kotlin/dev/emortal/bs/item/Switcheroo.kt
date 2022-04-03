@@ -1,5 +1,6 @@
 package dev.emortal.bs.item
 
+import dev.emortal.bs.game.BlockSumoGame
 import dev.emortal.bs.util.RaycastResultType
 import dev.emortal.bs.util.RaycastUtil
 import net.kyori.adventure.sound.Sound
@@ -22,7 +23,7 @@ object Switcheroo : Powerup(
     SpawnType.MIDDLE
 ) {
 
-    override fun use(player: Player, pos: Pos?, entity: Entity?) {
+    override fun use(game: BlockSumoGame, player: Player, pos: Pos?, entity: Entity?) {
         removeOne(player)
 
         player.instance!!.playSound(
@@ -31,7 +32,7 @@ object Switcheroo : Powerup(
         )
 
         val raycast = RaycastUtil.raycast(
-            player.instance!!,
+            game,
             player.eyePosition(),
             player.position.direction(),
             60.0,
