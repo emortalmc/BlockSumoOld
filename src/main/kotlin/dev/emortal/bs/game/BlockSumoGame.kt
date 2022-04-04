@@ -48,6 +48,7 @@ import net.minestom.server.entity.damage.EntityDamage
 import net.minestom.server.entity.damage.EntityProjectileDamage
 import net.minestom.server.event.entity.EntityAttackEvent
 import net.minestom.server.event.entity.EntityDamageEvent
+import net.minestom.server.event.inventory.InventoryPreClickEvent
 import net.minestom.server.event.item.ItemDropEvent
 import net.minestom.server.event.item.PickupItemEvent
 import net.minestom.server.event.player.*
@@ -76,6 +77,8 @@ import world.cepi.kstom.util.roundToBlock
 import world.cepi.particle.Particle
 import world.cepi.particle.ParticleType
 import world.cepi.particle.data.OffsetAndSpeed
+import world.cepi.particle.renderer.shape.CircleRenderer
+import world.cepi.particle.renderer.translate
 import world.cepi.particle.showParticle
 import java.time.Duration
 import java.util.*
@@ -93,6 +96,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     var diamondBlockPlayer: Player? = null
 
     val respawnTasks = ConcurrentHashMap<UUID, MinestomRunnable>()
+    val spawnProtIndicatorTasks = ConcurrentHashMap<UUID, MinestomRunnable>()
 
     var borderSize = 40.0
 
@@ -202,7 +206,8 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         teams.firstOrNull { it.teamName == player.username }?.destroy()
         scoreboard?.removeLine(player.uuid.toString())
 
-        if (players.size == 1) {
+        val alivePlayers = players.filter { it.lives > 0 }
+        if (alivePlayers.size == 1 || players.size == 1) {
             if (gameState != GameState.PLAYING) return
 
             victory(players.first())
@@ -215,6 +220,12 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         }
         listenOnly<PlayerSwapItemEvent> {
             isCancelled = true
+        }
+
+        listenOnly<InventoryPreClickEvent> {
+            if ((100..103).contains(slot)) {
+                isCancelled = true
+            }
         }
 
         listenOnly<PlayerBlockPlaceEvent> {
@@ -326,11 +337,19 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
             val entity = target as Player
 
-            attacker.spawnProtectionMillis = 0
-            if (!entity.canBeHit || entity.hasSpawnProtection) return@listenOnly
+            if (attacker.spawnProtectionMillis != 0L) {
+                attacker.playSound(Sound.sound(SoundEvent.ENTITY_GENERIC_EXTINGUISH_FIRE, Sound.Source.MASTER, 0.75f, 1f), attacker.position)
+                attacker.spawnProtectionMillis = 0L
+                spawnProtIndicatorTasks[attacker.uuid]?.cancelImmediate()
+                spawnProtIndicatorTasks.remove(attacker.uuid)
+            }
+            if (entity.hasSpawnProtection) {
+                attacker.playSound(Sound.sound(SoundEvent.BLOCK_WOOD_BREAK, Sound.Source.MASTER, 0.75f, 1.5f), attacker.position)
+                return@listenOnly
+            }
+            if (!entity.canBeHit) return@listenOnly
             if (attacker.getDistanceSquared(target) > 4*4) return@listenOnly
             entity.canBeHit = false
-
 
 
             val heldItem = attacker.heldPowerup
@@ -382,7 +401,13 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             var killer: Entity? = null
             if (player.lastDamageTimestamp + 8000 > System.currentTimeMillis() && player.lastDamageSource != null) {
                 killer = when (val lastDamageSource = player.lastDamageSource) {
-                    is EntityDamage -> lastDamageSource.source
+                    is EntityDamage -> {
+                        if (lastDamageSource.source is Player) {
+                            lastDamageSource.source
+                        } else {
+                            players.firstOrNull { it.username == lastDamageSource.source.getTag(Powerup.entityShooterTag) }
+                        }
+                    }
                     is EntityProjectileDamage -> lastDamageSource.shooter
                     else -> null
                 }
@@ -614,33 +639,24 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
         player.lives--
 
-        val actualKiller = if (killer is Player) {
-            val shooterTag = killer.getTag(Powerup.entityShooterTag)
-            if (shooterTag != null) {
-                players.firstOrNull { it.username == shooterTag } ?: killer
-            } else killer
-        } else {
-            killer
-        }
+        var message: Component
+        val victimTitle: Title
 
-        var message: Component = Component.empty()
-        var victimTitle: Title? = null
+        if (killer != null && killer is Player) {
+            killer.kills++
+            updateScoreboard(killer)
 
-        if (actualKiller != null && actualKiller is Player) {
-            actualKiller.kills++
-            updateScoreboard(actualKiller)
-
-            actualKiller.playSound(Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_PLING, Sound.Source.PLAYER, 1f, 1f), Emitter.self())
+            killer.playSound(Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_PLING, Sound.Source.PLAYER, 1f, 1f), Emitter.self())
 
             message = Component.text()
                 .append(Component.text("☠", NamedTextColor.RED))
                 .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
                 .append(Component.text(player.username, NamedTextColor.RED))
                 .append(Component.text(" was killed by ", NamedTextColor.GRAY))
-                .append(Component.text(actualKiller.username, NamedTextColor.WHITE))
+                .append(Component.text(killer.username, NamedTextColor.WHITE))
                 .build()
 
-            actualKiller.showTitle(
+            killer.showTitle(
                 Title.title(
                     Component.empty(),
                     Component.text()
@@ -655,7 +671,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 Component.text("YOU DIED", NamedTextColor.RED, TextDecoration.BOLD),
                 Component.text()
                     .append(Component.text("Killed by ", NamedTextColor.GRAY))
-                    .append(Component.text(actualKiller.username, NamedTextColor.RED, TextDecoration.BOLD))
+                    .append(Component.text(killer.username, NamedTextColor.RED, TextDecoration.BOLD))
                     .build(),
                 Title.Times.of(
                     Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(1)
@@ -718,8 +734,8 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         respawnTasks[player.uuid] = object : MinestomRunnable(delay = Duration.ofSeconds(2), repeat = Duration.ofSeconds(1), iterations = 4, coroutineScope = coroutineScope) {
             override suspend fun run() {
                 val currentIter = currentIteration.get()
-                if (currentIter == 0) {
-                    if (actualKiller != null && actualKiller != player) player.spectate(actualKiller)
+                if (currentIter == 1) {
+                    if (killer != null && killer is Player) player.spectate(killer)
                 }
 
                 val pos = killer?.position ?: player.position
@@ -776,6 +792,39 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         spawnProtectionMillis = 4000
         lastDamageTimestamp = 0
         setCanPickupItem(true)
+
+        spawnProtIndicatorTasks[uuid] = object : MinestomRunnable(repeat = Duration.ofMillis(50), coroutineScope = coroutineScope, iterations = 4000/50) {
+            var startingSecs = 4
+            var i = 0.0
+            override suspend fun run() {
+                val currentIter = currentIteration.get()
+
+                i += 0.05
+
+                if (currentIter % 20 == 0) {
+                    startingSecs--
+
+                    player.sendActionBar(
+                        Component.text()
+                            .append(Component.text("You lose spawn protection in ", NamedTextColor.DARK_GRAY))
+                            .append(Component.text(startingSecs, NamedTextColor.LIGHT_PURPLE, TextDecoration.BOLD))
+                            .append(Component.text(" seconds", NamedTextColor.DARK_GRAY))
+                    )
+                }
+
+                showParticle(Particle.particle(
+                    type = ParticleType.HAPPY_VILLAGER,
+                    data = OffsetAndSpeed(),
+                    count = 1
+                ), CircleRenderer(0.75, 15).translate(player.position.asVec().add(0.0, sin(i), 0.0)))
+
+            }
+
+            override fun cancelled() {
+                player.playSound(Sound.sound(SoundEvent.ENTITY_GENERIC_EXTINGUISH_FIRE, Sound.Source.MASTER, 0.75f, 1f), player.position)
+                player.sendActionBar(Component.empty())
+            }
+        }
 
         inventory.setItemStack(1, ItemStack.builder(color.woolMaterial).amount(64).build())
         inventory.setItemStack(2, Shears.createItemStack())

@@ -1,5 +1,6 @@
 package dev.emortal.bs
 
+import dev.emortal.bs.commands.EventCommand
 import dev.emortal.bs.commands.PowerupCommand
 import dev.emortal.bs.game.BlockSumoGame
 import dev.emortal.immortal.config.GameOptions
@@ -33,12 +34,14 @@ class BlockSumoExtension : Extension() {
         )
 
         PowerupCommand.register()
+        EventCommand.register()
 
         logger.info("[BlockSumo] Initialized!")
     }
 
     override fun terminate() {
         PowerupCommand.unregister()
+        EventCommand.unregister()
 
         logger.info("[BlockSumo] Terminated!")
     }

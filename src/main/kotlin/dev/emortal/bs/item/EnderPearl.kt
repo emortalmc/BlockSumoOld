@@ -58,7 +58,7 @@ object EnderPearl : Powerup(
 
                 val firstCollide = game.players.filter { it != player }.firstOrNull { it.boundingBox.intersectEntity(it.position, pearl) }
                 if (firstCollide != null) {
-                    lastPos?.let { player.teleport(it) }
+                    lastPos?.let { player.teleport(it.withDirection(player.position.direction())) }
 
                     collide(game, pearl)
                     cancel()
