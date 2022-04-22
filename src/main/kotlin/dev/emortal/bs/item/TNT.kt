@@ -2,6 +2,7 @@ package dev.emortal.bs.item
 
 import dev.emortal.bs.game.BlockSumoGame
 import dev.emortal.bs.util.SphereUtil
+import dev.emortal.immortal.util.MinestomRunnable
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
@@ -15,6 +16,7 @@ import net.minestom.server.sound.SoundEvent
 import net.minestom.server.utils.time.TimeUnit
 import world.cepi.kstom.Manager
 import world.cepi.kstom.util.playSound
+import java.time.Duration
 
 object TNT : Powerup(
     Component.text("TNT", NamedTextColor.RED),
@@ -38,6 +40,7 @@ object TNT : Powerup(
         val tntMeta = tntEntity.entityMeta as PrimedTntMeta
         //tntEntity.velocity = Vec(0.0, 10.0, 0.0)
         tntMeta.fuseTime = 60
+        tntEntity.setBoundingBox(0.98, 0.98, 0.98)
 
         tntEntity.setTag(itemIdTag, id)
         tntEntity.setTag(entityShooterTag, player.username)
@@ -48,11 +51,13 @@ object TNT : Powerup(
 
         game.playSound(Sound.sound(SoundEvent.ENTITY_TNT_PRIMED, Sound.Source.BLOCK, 2f, 1f), pos)
 
-        Manager.scheduler.buildTask {
-            game.explode(tntEntity.position, 3, 40.0, 6.0, true, tntEntity)
+        object : MinestomRunnable(delay = Duration.ofMillis(tntMeta.fuseTime * 50L), coroutineScope = game.coroutineScope) {
+            override suspend fun run() {
+                game.explode(tntEntity.position, 3, 40.0, 6.0, true, tntEntity)
 
-            tntEntity.remove()
-        }.delay(tntMeta.fuseTime.toLong(), TimeUnit.SERVER_TICK).schedule()
+                tntEntity.remove()
+            }
+        }
     }
 
 }

@@ -58,11 +58,13 @@ class TNTRainEvent : Event() {
 
                         game.playSound(Sound.sound(SoundEvent.ENTITY_TNT_PRIMED, Sound.Source.BLOCK, 2f, 1f), tntEntity.position)
 
-                        Manager.scheduler.buildTask {
-                            game.explode(tntEntity.position, 3, 40.0, 6.0, true, tntEntity)
+                        object : MinestomRunnable(delay = Duration.ofMillis(tntMeta.fuseTime * 50L), coroutineScope = game.coroutineScope) {
+                            override suspend fun run() {
+                                game.explode(tntEntity.position, 3, 40.0, 6.0, true, tntEntity)
 
-                            tntEntity.remove()
-                        }.delay(tntMeta.fuseTime.toLong(), TimeUnit.SERVER_TICK).schedule()
+                                tntEntity.remove()
+                            }
+                        }
                     }
             }
         }

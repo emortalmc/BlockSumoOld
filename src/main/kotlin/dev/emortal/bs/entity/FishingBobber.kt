@@ -12,6 +12,7 @@ import net.minestom.server.entity.damage.DamageType
 import net.minestom.server.entity.metadata.other.FishingHookMeta
 import net.minestom.server.item.Material
 import java.lang.Math.PI
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.cos
 import kotlin.math.sin
@@ -35,11 +36,17 @@ class FishingBobber(val shooter: Player, val game: BlockSumoGame) : Entity(Entit
         }
 
     companion object {
-        val bobbers = ConcurrentHashMap<Player, FishingBobber>()
+        val bobbers = ConcurrentHashMap<UUID, FishingBobber>()
+        val hookedPlayer = ConcurrentHashMap<UUID, Player>()
     }
 
     init {
         ownerEntity = shooter
+    }
+
+    override fun remove() {
+        println("Removed")
+        super.remove()
     }
 
     override fun update(time: Long) {
@@ -47,17 +54,22 @@ class FishingBobber(val shooter: Player, val game: BlockSumoGame) : Entity(Entit
             remove()
             ownerEntity = null
             hookedEntity = null
-            bobbers.remove(shooter)
+            bobbers.remove(shooter.uuid)
             return
         }
 
+        println(position)
+        println(getPosition())
+
+        val expandedBox = this.boundingBox.expand(0.7, 0.7, 0.7)
         val hitPlayer = instance.entities
             .filterIsInstance<Player>()
             .filter { it != shooter && it.gameMode == GameMode.SURVIVAL }
-            .firstOrNull { it.boundingBox.expand(0.25, 0.25, 0.25).intersectEntity(it.position, this) }
+            .firstOrNull { expandedBox.intersectEntity(this.position, it) }
 
         if (hitPlayer != null && hookedEntity == null) {
             hookedEntity = hitPlayer
+            hookedPlayer[shooter.uuid] = hitPlayer
             hitPlayer.takeKnockback(shooter)
             hitPlayer.damage(DamageType.fromPlayer(shooter), 0f)
         }
@@ -65,22 +77,25 @@ class FishingBobber(val shooter: Player, val game: BlockSumoGame) : Entity(Entit
     }
 
     fun retract() {
+        println("Retract")
+        println(getPosition())
         val powerup = shooter.heldPowerup
-        powerup?.use(game, shooter, this.position, hookedEntity)
+        powerup?.use(game, shooter, getPosition(), hookedPlayer[shooter.uuid])
 
         remove()
         ownerEntity = null
         hookedEntity = null
-        bobbers.remove(shooter)
+        hookedPlayer.remove(shooter.uuid)
+        bobbers.remove(shooter.uuid)
     }
 
     fun throwBobber() {
-        if (bobbers.containsKey(shooter)) {
+        if (bobbers.containsKey(shooter.uuid)) {
             retract()
             return
         }
-        bobbers[shooter]?.retract()
-        bobbers[shooter] = this
+        bobbers[shooter.uuid]?.retract()
+        bobbers[shooter.uuid] = this
 
         val playerPos = shooter.position
         val playerPitch = playerPos.pitch
@@ -99,8 +114,8 @@ class FishingBobber(val shooter: Player, val game: BlockSumoGame) : Entity(Entit
     }
 
     fun shouldStopFishing(player: Player): Boolean {
-        val main = player.itemInMainHand.material === Material.FISHING_ROD
-        if (player.isRemoved || player.isDead || !main) return true
+        val main = player.itemInMainHand.material() == Material.FISHING_ROD
+        if (player.isDead || !main) return true
         if (hookedEntity != null) {
             if (hookedEntity!!.isRemoved || hookedEntity!!.gameMode != GameMode.SURVIVAL) return true
         }

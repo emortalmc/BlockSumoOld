@@ -20,7 +20,7 @@ object Puncher : Powerup(
     PowerupInteractType.ATTACK,
     SpawnType.MIDDLE,
     {
-        it.enchantment(Enchantment.KNOCKBACK, Byte.MAX_VALUE.toShort())
+        it.enchantment(Enchantment.KNOCKBACK, 5)
     }
 ) {
 
@@ -28,10 +28,6 @@ object Puncher : Powerup(
         removeOne(player)
 
         game.playSound(Sound.sound(SoundEvent.ENTITY_PLAYER_ATTACK_CRIT, Sound.Source.PLAYER, 1f, 1f), player.position)
-
-        if (entity != null) {
-            entity.velocity = player.position.direction().mul(100.0)
-        }
 
     }
 

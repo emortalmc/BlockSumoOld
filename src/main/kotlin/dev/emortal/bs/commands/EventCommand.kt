@@ -4,6 +4,8 @@ import dev.emortal.bs.event.Event
 import dev.emortal.bs.game.BlockSumoGame
 import dev.emortal.immortal.game.GameManager.game
 import dev.emortal.immortal.luckperms.PermissionUtils.hasLuckPermission
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.NamedTextColor
 import net.minestom.server.command.builder.arguments.ArgumentType
 import world.cepi.kstom.command.arguments.suggest
 import world.cepi.kstom.command.kommand.Kommand
@@ -18,6 +20,7 @@ object EventCommand : Kommand({
 
     syntax(eventArg) {
         if (!player.hasLuckPermission("blocksumo.event")) {
+            player.sendMessage(Component.text("No permission", NamedTextColor.RED))
             return@syntax
         }
 

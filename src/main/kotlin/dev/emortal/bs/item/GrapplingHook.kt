@@ -34,9 +34,10 @@ object GrapplingHook : Powerup(
             player.position
         )
 
-        player.velocity = pos.sub(player.position).asVec().normalize().mul(200.0, 40.0, 200.0)
+        val gaming = player.position.sub(pos).asVec()
+        player.velocity = gaming.normalize().mul(200.0, 260.0, 200.0)
         if (entity != null) {
-            entity.velocity = player.position.sub(entity.position).asVec().normalize().mul(200.0, 100.0, 200.0)
+            entity.velocity = player.position.sub(entity.position).asVec().normalize().mul(200.0, 260.0, 200.0)
         }
 
     }

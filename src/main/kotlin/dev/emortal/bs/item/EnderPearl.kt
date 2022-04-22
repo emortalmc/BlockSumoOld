@@ -49,7 +49,7 @@ object EnderPearl : Powerup(
             var lastPos: Pos? = null
             override suspend fun run() {
                 if (pearl.velocity.x() == 0.0 || pearl.velocity.y() == 0.0 || pearl.velocity.z() == 0.0) {
-                    lastPos?.let { player.teleport(it) }
+                    lastPos?.let { player.teleport(it.withDirection(player.position.direction())) }
 
                     collide(game, pearl)
                     cancel()

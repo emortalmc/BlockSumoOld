@@ -6,7 +6,7 @@ import net.kyori.adventure.text.format.TextDecoration
 import net.minestom.server.coordinate.Pos
 import net.minestom.server.entity.Entity
 import net.minestom.server.entity.Player
-import net.minestom.server.item.ItemMetaBuilder
+import net.minestom.server.item.ItemMeta
 import net.minestom.server.item.ItemStack
 import net.minestom.server.item.Material
 import net.minestom.server.tag.Tag
@@ -20,7 +20,7 @@ sealed class Powerup(
     rarity: Rarity,
     val interactType: PowerupInteractType,
     val spawnType: SpawnType,
-    itemCreate: (ItemMetaBuilder) -> Unit = { }
+    itemCreate: (ItemMeta.Builder) -> Unit = { }
 ) : Item(id, material, rarity, itemCreate) {
 
     companion object {
@@ -67,17 +67,18 @@ sealed class Powerup(
     }
 
     override fun createItemStack(): ItemStack {
-        return item(material) {
-            displayName(name.decoration(TextDecoration.ITALIC, false))
-            setTag(itemIdTag, id)
-            lore(rarity.component.decoration(TextDecoration.ITALIC, false))
-            itemCreate.invoke(this)
-        }
+        return ItemStack.builder(material).meta {
+            it.displayName(name.decoration(TextDecoration.ITALIC, false))
+            it.setTag(itemIdTag, id)
+            it.lore(rarity.component.decoration(TextDecoration.ITALIC, false))
+            itemCreate.invoke(it)
+            it
+        }.build()
     }
 
     fun removeOne(player: Player) {
         val itemInHand = player.inventory.itemInMainHand
-        player.inventory.itemInMainHand = itemInHand.withAmount(itemInHand.amount - 1)
+        player.inventory.itemInMainHand = itemInHand.withAmount(itemInHand.amount() - 1)
     }
 
 }

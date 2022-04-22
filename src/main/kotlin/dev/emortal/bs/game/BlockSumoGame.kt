@@ -61,6 +61,7 @@ import net.minestom.server.item.Material
 import net.minestom.server.item.firework.FireworkEffect
 import net.minestom.server.item.firework.FireworkEffectType
 import net.minestom.server.item.metadata.LeatherArmorMeta
+import net.minestom.server.message.Messenger.sendMessage
 import net.minestom.server.network.packet.server.play.EffectPacket
 import net.minestom.server.network.packet.server.play.TeamsPacket
 import net.minestom.server.scoreboard.Sidebar
@@ -68,6 +69,7 @@ import net.minestom.server.sound.SoundEvent
 import net.minestom.server.utils.Direction
 import net.minestom.server.utils.NamespaceID
 import world.cepi.kstom.Manager
+import world.cepi.kstom.adventure.color
 import world.cepi.kstom.event.listenOnly
 import world.cepi.kstom.item.item
 import world.cepi.kstom.util.asPos
@@ -110,7 +112,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         }
 
         if (player.team == null) {
-            val newTeam = Team(player.username, player.color.color, TeamsPacket.CollisionRule.NEVER)
+            val newTeam = registerTeam(Team(player.username, player.color.color, TeamsPacket.CollisionRule.NEVER))
             newTeam.add(player)
         }
         player.team.updateSuffix(
@@ -141,40 +143,34 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         }
 
 
-        val newTeam = Team(player.username, player.color.color, TeamsPacket.CollisionRule.NEVER)
+        val newTeam = registerTeam(Team(player.username, player.color.color, TeamsPacket.CollisionRule.NEVER))
         newTeam.add(player)
         newTeam.scoreboardTeam.updateSuffix(
             Component.text().append(Component.text(" - ", NamedTextColor.GRAY))
                 .append(Component.text("5", NamedTextColor.GREEN, TextDecoration.BOLD)).build()
         )
 
-        registerTeam(newTeam)
-
         if (player.username == "emortaldev") {
-            object : MinestomRunnable(coroutineScope = coroutineScope, repeat = Duration.ofMillis(100)) {
+            object : MinestomRunnable(coroutineScope = coroutineScope, repeat = Duration.ofMillis(50)) {
                 var rainbow = 0f
                 override suspend fun run() {
-                    rainbow += 0.05f
+                    rainbow += 0.015f
                     if (rainbow >= 1f) {
                         rainbow = 0f
                     }
 
-                    player.helmet = item(Material.LEATHER_HELMET) {
-                        this as LeatherArmorMeta.Builder
-                        this.color(Color(java.awt.Color.HSBtoRGB(rainbow, 1f, 1f)))
-                    }
-                    player.chestplate = item(Material.LEATHER_CHESTPLATE) {
-                        this as LeatherArmorMeta.Builder
-                        this.color(Color(java.awt.Color.HSBtoRGB((rainbow + 0.1f) % 1f, 1f, 1f)))
-                    }
-                    player.leggings = item(Material.LEATHER_LEGGINGS) {
-                        this as LeatherArmorMeta.Builder
-                        this.color(Color(java.awt.Color.HSBtoRGB((rainbow + 0.2f) % 1f, 1f, 1f)))
-                    }
-                    player.boots = item(Material.LEATHER_BOOTS) {
-                        this as LeatherArmorMeta.Builder
-                        this.color(Color(java.awt.Color.HSBtoRGB((rainbow + 0.3f) % 1f, 1f, 1f)))
-                    }
+                    player.helmet = ItemStack.builder(Material.LEATHER_HELMET).meta(LeatherArmorMeta::class.java) {
+                        it.color(Color(java.awt.Color.HSBtoRGB(rainbow, 1f, 1f)))
+                    }.build()
+                    player.chestplate = ItemStack.builder(Material.LEATHER_CHESTPLATE).meta(LeatherArmorMeta::class.java) {
+                        it.color(Color(java.awt.Color.HSBtoRGB((rainbow + 0.1f) % 1f, 1f, 1f)))
+                    }.build()
+                    player.leggings = ItemStack.builder(Material.LEATHER_LEGGINGS).meta(LeatherArmorMeta::class.java) {
+                        it.color(Color(java.awt.Color.HSBtoRGB((rainbow + 0.2f) % 1f, 1f, 1f)))
+                    }.build()
+                    player.boots = ItemStack.builder(Material.LEATHER_BOOTS).meta(LeatherArmorMeta::class.java) {
+                        it.color(Color(java.awt.Color.HSBtoRGB((rainbow + 0.3f) % 1f, 1f, 1f)))
+                    }.build()
                 }
             }
         }
@@ -231,7 +227,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         listenOnly<PlayerBlockPlaceEvent> {
             consumeBlock(false)
 
-            if (blockPosition.distanceSquared(player.position) > 6*6) {
+            if (blockPosition.distanceSquared(player.position.add(0.0, 1.0, 0.0)) > 5*5) {
                 isCancelled = true
                 return@listenOnly
             }
@@ -258,7 +254,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 }
             }
 
-            if (player.inventory.itemInMainHand.material.name().endsWith("wool", ignoreCase = true)) {
+            if (player.inventory.itemInMainHand.material().name().endsWith("wool", ignoreCase = true)) {
                 player.inventory.itemInMainHand = ItemStack.builder(player.color.woolMaterial).amount(64).build()
 
                 if (isNextToBarrier(player.instance!!, blockPosition)) {
@@ -280,7 +276,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         }
 
         listenOnly<PlayerBlockBreakEvent> {
-            if (!block.name().contains("WOOL", true)) {
+            if (!block.name().contains("wool", true)) {
                 isCancelled = true
             }
         }
@@ -294,8 +290,8 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             if (heldItem.id == "grapplehook") {
                 isCancelled = false
 
-                if (FishingBobber.bobbers.contains(player)) {
-                    FishingBobber.bobbers[player]?.retract()
+                if (FishingBobber.bobbers.containsKey(player.uuid)) {
+                    FishingBobber.bobbers[player.uuid]?.retract()
                     return@listenOnly
                 }
 
@@ -351,14 +347,13 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             if (attacker.getDistanceSquared(target) > 4*4) return@listenOnly
             entity.canBeHit = false
 
+            entity.damage(DamageType.fromPlayer(attacker), 0f)
+            entity.takeKnockback(attacker)
 
             val heldItem = attacker.heldPowerup
             if (heldItem != null && heldItem.interactType == PowerupInteractType.ATTACK) {
                 heldItem.use(this@BlockSumoGame, attacker, null, target)
             }
-
-            entity.damage(DamageType.fromPlayer(attacker), 0f)
-            entity.takeKnockback(attacker)
 
             Manager.scheduler.buildTask {
                 entity.canBeHit = true
@@ -480,7 +475,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                                     Title.title(
                                         Component.text(seconds, lerp(seconds / 5f, NamedTextColor.RED, NamedTextColor.GREEN)),
                                         Component.empty(),
-                                        Title.Times.of(Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(1))
+                                        Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(1))
                                     )
                                 )
                             }
@@ -663,7 +658,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                         .append(Component.text("☠ ", NamedTextColor.RED))
                         .append(Component.text(player.username, NamedTextColor.RED))
                         .build(),
-                    Title.Times.of(Duration.ZERO, Duration.ofSeconds(1), Duration.ofMillis(500))
+                    Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ofMillis(500))
                 )
             )
 
@@ -673,7 +668,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                     .append(Component.text("Killed by ", NamedTextColor.GRAY))
                     .append(Component.text(killer.username, NamedTextColor.RED, TextDecoration.BOLD))
                     .build(),
-                Title.Times.of(
+                Title.Times.times(
                     Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(1)
                 )
             )
@@ -691,7 +686,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             victimTitle = Title.title(
                 Component.text("YOU DIED", NamedTextColor.RED, TextDecoration.BOLD),
                 Component.empty(),
-                Title.Times.of(
+                Title.Times.times(
                     Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(1)
                 )
             )
@@ -718,7 +713,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             player.showTitle(Title.title(
                 Component.text("YOU DIED", NamedTextColor.RED, TextDecoration.BOLD),
                 Component.text("(Final kill)", NamedTextColor.DARK_GRAY),
-                Title.Times.of(
+                Title.Times.times(
                     Duration.ZERO, Duration.ofSeconds(2), Duration.ofSeconds(1)
                 )
             ))
@@ -731,7 +726,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
         updateScoreboard(player)
 
-        respawnTasks[player.uuid] = object : MinestomRunnable(delay = Duration.ofSeconds(2), repeat = Duration.ofSeconds(1), iterations = 4, coroutineScope = coroutineScope) {
+        respawnTasks[player.uuid] = object : MinestomRunnable(delay = Duration.ofSeconds(2), repeat = Duration.ofSeconds(1), iterations = 3, coroutineScope = coroutineScope) {
             override suspend fun run() {
                 val currentIter = currentIteration.get()
                 if (currentIter == 1) {
@@ -747,7 +742,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                     Title.title(
                         Component.text(iterations - currentIter, NamedTextColor.GOLD, TextDecoration.BOLD),
                         Component.empty(),
-                        Title.Times.of(
+                        Title.Times.times(
                             Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(1)
                         )
                     )
@@ -767,17 +762,16 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             gameMode = GameMode.SURVIVAL
         }
 
-        player.boots = item(Material.LEATHER_BOOTS) {
-            this as LeatherArmorMeta.Builder
-            this.color(Color(player.color.color))
-        }
+        player.boots = ItemStack.builder(Material.LEATHER_BOOTS).meta(LeatherArmorMeta::class.java) {
+            it.color(Color(player.color.color))
+        }.build()
 
         when (username) {
             "GoldenStack" -> {
-                player.helmet = item(Material.GOLDEN_HELMET)
-                player.chestplate = item(Material.GOLDEN_CHESTPLATE)
-                player.leggings = item(Material.GOLDEN_LEGGINGS)
-                player.boots = item(Material.GOLDEN_BOOTS)
+                player.helmet = ItemStack.of(Material.GOLDEN_HELMET)
+                player.chestplate = ItemStack.of(Material.GOLDEN_CHESTPLATE)
+                player.leggings = ItemStack.of(Material.GOLDEN_LEGGINGS)
+                player.boots = ItemStack.of(Material.GOLDEN_BOOTS)
             }
         }
 
@@ -793,15 +787,15 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         lastDamageTimestamp = 0
         setCanPickupItem(true)
 
-        spawnProtIndicatorTasks[uuid] = object : MinestomRunnable(repeat = Duration.ofMillis(50), coroutineScope = coroutineScope, iterations = 4000/50) {
+        spawnProtIndicatorTasks[uuid] = object : MinestomRunnable(repeat = Duration.ofMillis(100), coroutineScope = coroutineScope, iterations = 4000/100) {
             var startingSecs = 4
             var i = 0.0
             override suspend fun run() {
                 val currentIter = currentIteration.get()
 
-                i += 0.05
+                i += 0.1
 
-                if (currentIter % 20 == 0) {
+                if (currentIter % 10 == 0) {
                     startingSecs--
 
                     player.sendActionBar(
@@ -812,11 +806,11 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                     )
                 }
 
-                showParticle(Particle.particle(
+                this@BlockSumoGame.showParticle(Particle.particle(
                     type = ParticleType.HAPPY_VILLAGER,
                     data = OffsetAndSpeed(),
                     count = 1
-                ), CircleRenderer(0.75, 15).translate(player.position.asVec().add(0.0, sin(i), 0.0)))
+                ), CircleRenderer(0.75, 7).translate(player.position.asVec().add(0.0, sin(i), 0.0)))
 
             }
 
@@ -829,20 +823,6 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         inventory.setItemStack(1, ItemStack.builder(color.woolMaterial).amount(64).build())
         inventory.setItemStack(2, Shears.createItemStack())
 
-    }
-
-    private fun diamondAllSides(pos: Pos) {
-        Manager.scheduler.buildTask {
-            Direction.values().forEach {
-                val newPos = pos.add(it.normalX().toDouble(), it.normalY().toDouble(), it.normalZ().toDouble())
-
-                val blockAtPos = instance.getBlock(newPos)
-                if (blockAtPos.compare(Block.DIAMOND_BLOCK) || blockAtPos.compare(Block.AIR)) return@forEach
-                instance.setBlock(newPos, Block.DIAMOND_BLOCK)
-
-                diamondAllSides(newPos)
-            }
-        }.delay(Duration.ofMillis(150)).schedule()
     }
 
     override fun gameDestroyed() {
@@ -863,13 +843,16 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
         pos = pos.withDirection(angle1).withPitch(0f)
 
-        instance.setBlock(pos.add(0.0, 1.0, 0.0), Block.AIR)
-        instance.setBlock(pos.add(0.0, 2.0, 0.0), Block.AIR)
-        instance.setBlock(pos, Block.BEDROCK)
+        val block = instance.getBlock(pos)
+        if (block.isAir || block.name().endsWith("wool", true)) {
+            instance.setBlock(pos.add(0.0, 1.0, 0.0), Block.AIR)
+            instance.setBlock(pos.add(0.0, 2.0, 0.0), Block.AIR)
+            instance.setBlock(pos, Block.BEDROCK)
 
-        Manager.scheduler.buildTask { instance.setBlock(pos, Block.WHITE_WOOL) }
-            .delay(Duration.ofSeconds(4))
-            .schedule()
+            Manager.scheduler.buildTask { instance.setBlock(pos, Block.WHITE_WOOL) }
+                .delay(Duration.ofSeconds(4))
+                .schedule()
+        }
 
         return pos.add(0.0, 1.0, 0.0)
     }

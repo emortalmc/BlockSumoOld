@@ -18,7 +18,7 @@ object PowerupCommand : Kommand({
 
     syntax(amountArg, powerupArg) {
         if (!player.hasLuckPermission("blocksumo.powerup")) {
-            player.sendMessage(Component.text("No permission", NamedTextColor.RED, TextDecoration.BOLD))
+            player.sendMessage(Component.text("No permission", NamedTextColor.RED))
             return@syntax
         }
 
@@ -31,7 +31,7 @@ object PowerupCommand : Kommand({
 
     syntax(powerupArg) {
         if (!player.hasLuckPermission("blocksumo.powerup")) {
-            player.sendMessage(Component.text("No permission", NamedTextColor.RED, TextDecoration.BOLD))
+            player.sendMessage(Component.text("No permission", NamedTextColor.RED))
             return@syntax
         }
         val gun = context.get(powerupArg).joinToString(separator = " ")
