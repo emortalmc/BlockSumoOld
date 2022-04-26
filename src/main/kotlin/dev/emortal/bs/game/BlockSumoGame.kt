@@ -371,7 +371,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
             if (player.gameMode != GameMode.SURVIVAL) return@listenOnly
             isCancelled = !player.inventory.addItemStack(itemEntity.itemStack)
-            if (!isCancelled) {
+            /*if (!isCancelled) {
                 player.playSound(
                     Sound.sound(
                         SoundEvent.ENTITY_ITEM_PICKUP,
@@ -380,7 +380,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                         1f
                     )
                 )
-            }
+            }*/
         }
 
         listenOnly<PlayerBlockInteractEvent> {
