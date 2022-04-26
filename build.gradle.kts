@@ -17,11 +17,11 @@ repositories {
 }
 
 dependencies {
-    compileOnly("com.github.Minestom:Minestom:c7bb9e14e5")
-    compileOnly("com.github.EmortalMC:Immortal:a9f690cd78")
+    compileOnly("com.github.Minestom:Minestom:c8ae194f7d")
+    compileOnly("com.github.EmortalMC:Immortal:e9c693da83")
 
     compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.3.2")
-    compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.0")
+    compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.1")
 }
 
 tasks {
