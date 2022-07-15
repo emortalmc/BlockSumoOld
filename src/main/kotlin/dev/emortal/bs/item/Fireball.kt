@@ -12,6 +12,8 @@ import net.minestom.server.entity.Player
 import net.minestom.server.item.Material
 import net.minestom.server.sound.SoundEvent
 import net.minestom.server.timer.Task
+import net.minestom.server.timer.TaskSchedule
+import world.cepi.kstom.Manager
 import world.cepi.kstom.adventure.asMini
 import world.cepi.kstom.util.playSound
 import world.cepi.particle.Particle
@@ -44,13 +46,11 @@ object Fireball : Powerup(
         fireBall.velocity = originalVelocity
 
         // removal task
-        object : MinestomRunnable(coroutineScope = game.coroutineScope, delay = Duration.ofSeconds(20)) {
-            override suspend fun run() {
-                fireBall.remove()
-                BlockSumoExtension.taskMap[entity]?.cancel()
-                BlockSumoExtension.taskMap.remove(entity)
-            }
-        }
+        game.taskGroup.tasks.add(Manager.scheduler.buildTask {
+            fireBall.remove()
+            BlockSumoExtension.taskMap[entity]?.cancel()
+            BlockSumoExtension.taskMap.remove(entity)
+        }.delay(Duration.ofSeconds(20)).schedule())
 
         val instance = player.instance!!
 
@@ -61,8 +61,8 @@ object Fireball : Powerup(
             player.position
         )
 
-        val task = object : MinestomRunnable(coroutineScope = game.coroutineScope, repeat = Duration.ofMillis(50)) {
-            override suspend fun run() {
+        val task = object : MinestomRunnable(taskGroup = game.taskGroup, repeat = TaskSchedule.nextTick()) {
+            override fun run() {
                 if (fireBall.velocity.x() == 0.0 || fireBall.velocity.y() == 0.0 || fireBall.velocity.z() == 0.0) {
                     collide(game, fireBall)
                     cancel()

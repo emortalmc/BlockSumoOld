@@ -1,7 +1,6 @@
 package dev.emortal.bs.item
 
 import dev.emortal.bs.game.BlockSumoGame
-import dev.emortal.immortal.util.MinestomRunnable
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
@@ -13,10 +12,9 @@ import net.minestom.server.entity.Player
 import net.minestom.server.entity.metadata.other.PrimedTntMeta
 import net.minestom.server.item.Material
 import net.minestom.server.sound.SoundEvent
-import net.minestom.server.utils.time.TimeUnit
+import net.minestom.server.timer.TaskSchedule
 import world.cepi.kstom.Manager
 import world.cepi.kstom.util.playSound
-import java.time.Duration
 
 object AntiGravityTNT : Powerup(
     Component.text("Anti-Gravity TNT", NamedTextColor.AQUA),
@@ -51,13 +49,11 @@ object AntiGravityTNT : Powerup(
 
         game.playSound(Sound.sound(SoundEvent.ENTITY_TNT_PRIMED, Sound.Source.BLOCK, 2f, 1f), pos)
 
-        object : MinestomRunnable(delay = Duration.ofMillis(tntMeta.fuseTime * 50L), coroutineScope = game.coroutineScope) {
-            override suspend fun run() {
-                game.explode(tntEntity.position, 3, 40.0, 6.0, true, tntEntity)
+        game.taskGroup.tasks.add(Manager.scheduler.buildTask {
+            game.explode(tntEntity.position, 3, 40.0, 6.0, true, tntEntity)
 
-                tntEntity.remove()
-            }
-        }
+            tntEntity.remove()
+        }.delay(TaskSchedule.tick(tntMeta.fuseTime)).schedule())
     }
 
 }

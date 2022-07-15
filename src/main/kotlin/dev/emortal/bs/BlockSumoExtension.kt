@@ -12,11 +12,12 @@ import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
 import net.minestom.server.entity.Entity
 import net.minestom.server.extensions.Extension
+import java.util.concurrent.ConcurrentHashMap
 
 class BlockSumoExtension : Extension() {
 
     companion object {
-        val taskMap = hashMapOf<Entity, MinestomRunnable>()
+        val taskMap = ConcurrentHashMap<Entity, MinestomRunnable>()
     }
 
     override fun initialize() {

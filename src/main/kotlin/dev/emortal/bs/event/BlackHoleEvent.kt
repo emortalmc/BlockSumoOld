@@ -8,6 +8,7 @@ import net.kyori.adventure.text.format.NamedTextColor
 import net.minestom.server.coordinate.Vec
 import net.minestom.server.entity.GameMode
 import net.minestom.server.sound.SoundEvent
+import net.minestom.server.timer.TaskSchedule
 import world.cepi.kstom.util.playSound
 import world.cepi.particle.Particle
 import world.cepi.particle.ParticleType
@@ -37,10 +38,10 @@ class BlackHoleEvent : Event() {
             )
         )
 
-        object : MinestomRunnable(repeat = Duration.ofMillis(50), coroutineScope = game.coroutineScope, iterations = 10*20) {
+        object : MinestomRunnable(repeat = TaskSchedule.nextTick(), taskGroup = game.taskGroup, iterations = 10L*20L) {
             val blackHolePos = game.spawnPos.add(0.0, 1.5, 0.0)
 
-            override suspend fun run() {
+            override fun run() {
                 game.players.filter { it.gameMode == GameMode.SURVIVAL }.forEach {
                     val vec = blackHolePos.sub(it.position).asVec().normalize().mul(20.0)
                     it.velocity = vec

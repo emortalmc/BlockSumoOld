@@ -1,6 +1,8 @@
 package dev.emortal.bs.entity
 
 import dev.emortal.bs.game.BlockSumoGame
+import dev.emortal.bs.game.BlockSumoPlayerHelper.canBeHit
+import dev.emortal.bs.game.BlockSumoPlayerHelper.hasSpawnProtection
 import dev.emortal.bs.item.Powerup.Companion.heldPowerup
 import dev.emortal.immortal.util.takeKnockback
 import net.minestom.server.coordinate.Vec
@@ -12,7 +14,7 @@ import net.minestom.server.entity.damage.DamageType
 import net.minestom.server.entity.metadata.other.FishingHookMeta
 import net.minestom.server.item.Material
 import java.lang.Math.PI
-import java.util.UUID
+import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.cos
 import kotlin.math.sin
@@ -45,7 +47,6 @@ class FishingBobber(val shooter: Player, val game: BlockSumoGame) : Entity(Entit
     }
 
     override fun remove() {
-        println("Removed")
         super.remove()
     }
 
@@ -58,9 +59,6 @@ class FishingBobber(val shooter: Player, val game: BlockSumoGame) : Entity(Entit
             return
         }
 
-        println(position)
-        println(getPosition())
-
         val expandedBox = this.boundingBox.expand(0.7, 0.7, 0.7)
         val hitPlayer = instance.entities
             .filterIsInstance<Player>()
@@ -70,15 +68,15 @@ class FishingBobber(val shooter: Player, val game: BlockSumoGame) : Entity(Entit
         if (hitPlayer != null && hookedEntity == null) {
             hookedEntity = hitPlayer
             hookedPlayer[shooter.uuid] = hitPlayer
-            hitPlayer.takeKnockback(shooter)
-            hitPlayer.damage(DamageType.fromPlayer(shooter), 0f)
+            if (hitPlayer.canBeHit && !hitPlayer.hasSpawnProtection)  {
+                hitPlayer.takeKnockback(shooter)
+                hitPlayer.damage(DamageType.fromPlayer(shooter), 0f)
+            }
         }
 
     }
 
     fun retract() {
-        println("Retract")
-        println(getPosition())
         val powerup = shooter.heldPowerup
         powerup?.use(game, shooter, getPosition(), hookedPlayer[shooter.uuid])
 

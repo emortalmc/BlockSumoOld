@@ -12,7 +12,7 @@ import net.minestom.server.item.Material
 import net.minestom.server.sound.SoundEvent
 
 object KnockbackStick : Powerup(
-    Component.text("Knockback Stick", NamedTextColor.RED),
+    Component.text("Zaza Stick", NamedTextColor.RED),
     "kbstick",
     Material.STICK,
     Rarity.RARE,

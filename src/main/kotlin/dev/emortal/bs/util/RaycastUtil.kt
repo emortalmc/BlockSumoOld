@@ -29,8 +29,8 @@ object RaycastUtil {
             boundingBoxToArea3dMap.computeIfAbsent(box) { it ->
                 Area3dRectangularPrism.wrapper(
                     it,
-                    { it.minX }, { it.minY }, { it.minZ },
-                    { it.maxX }, { it.maxY }, { it.maxZ }
+                    { it.minX - 0.5 }, { it.minY - 0.5 }, { it.minZ - 0.5 },
+                    { it.maxX + 0.5 }, { it.maxY + 0.5 }, { it.maxZ + 0.5 }
                 )
             }
 

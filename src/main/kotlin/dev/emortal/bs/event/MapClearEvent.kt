@@ -8,6 +8,7 @@ import net.kyori.adventure.text.format.NamedTextColor
 import net.minestom.server.instance.batch.AbsoluteBlockBatch
 import net.minestom.server.instance.block.Block
 import net.minestom.server.sound.SoundEvent
+import net.minestom.server.timer.TaskSchedule
 import java.time.Duration
 
 class MapClearEvent : Event() {
@@ -31,13 +32,13 @@ class MapClearEvent : Event() {
             )
         )
 
-        object : MinestomRunnable(repeat = Duration.ofMillis(150), coroutineScope = game.coroutineScope, iterations = 90-63) {
-            override suspend fun run() {
+        object : MinestomRunnable(repeat = TaskSchedule.tick(3), taskGroup = game.taskGroup, iterations = 90L-63L) {
+            override fun run() {
                 val batch = AbsoluteBlockBatch()
                 val size: Int = (game.borderSize/2).toInt() - 1
                 for (x in -size..size) {
                     for (z in -size..size) {
-                        batch.setBlock(x, 91 - currentIteration.get(), z, Block.AIR)
+                        batch.setBlock(x, (91L - currentIteration).toInt(), z, Block.AIR)
                     }
                 }
                 batch.apply(game.instance) {}

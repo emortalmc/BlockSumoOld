@@ -13,7 +13,7 @@ import net.minestom.server.entity.EntityType
 import net.minestom.server.entity.GameMode
 import net.minestom.server.entity.metadata.other.PrimedTntMeta
 import net.minestom.server.sound.SoundEvent
-import net.minestom.server.utils.time.TimeUnit
+import net.minestom.server.timer.TaskSchedule
 import world.cepi.kstom.Manager
 import world.cepi.kstom.util.playSound
 import java.time.Duration
@@ -43,8 +43,8 @@ class TNTRainEvent : Event() {
             )
         )
 
-        object : MinestomRunnable(repeat = Duration.ofMillis(2000), coroutineScope = game.coroutineScope, iterations = 5) {
-            override suspend fun run() {
+        object : MinestomRunnable(repeat = Duration.ofMillis(2000), taskGroup = game.taskGroup, iterations = 5L) {
+            override fun run() {
                 game.players
                     .filter { it.gameMode == GameMode.SURVIVAL }
                     .forEach {
@@ -58,13 +58,11 @@ class TNTRainEvent : Event() {
 
                         game.playSound(Sound.sound(SoundEvent.ENTITY_TNT_PRIMED, Sound.Source.BLOCK, 2f, 1f), tntEntity.position)
 
-                        object : MinestomRunnable(delay = Duration.ofMillis(tntMeta.fuseTime * 50L), coroutineScope = game.coroutineScope) {
-                            override suspend fun run() {
-                                game.explode(tntEntity.position, 3, 40.0, 6.0, true, tntEntity)
+                        game.taskGroup.tasks.add(Manager.scheduler.buildTask {
+                            game.explode(tntEntity.position, 3, 40.0, 6.0, true, tntEntity)
 
-                                tntEntity.remove()
-                            }
-                        }
+                            tntEntity.remove()
+                        }.delay(TaskSchedule.tick(tntMeta.fuseTime)).schedule())
                     }
             }
         }

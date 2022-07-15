@@ -11,6 +11,7 @@ import net.minestom.server.entity.EntityType
 import net.minestom.server.entity.Player
 import net.minestom.server.item.Material
 import net.minestom.server.sound.SoundEvent
+import net.minestom.server.timer.TaskSchedule
 import world.cepi.kstom.adventure.asMini
 import world.cepi.kstom.util.playSound
 import world.cepi.particle.Particle
@@ -38,16 +39,12 @@ object EnderPearl : Powerup(
         pearl.velocity = player.position.direction().normalize().mul(35.0)
         pearl.setGravity(0.04, 0.04)
 
-        // removal task
-        object : MinestomRunnable(coroutineScope = game.coroutineScope, delay = Duration.ofSeconds(10)) {
-            override suspend fun run() {
-                pearl.remove()
-            }
-        }
+        pearl.scheduleRemove(Duration.ofSeconds(10))
 
-        val task = object : MinestomRunnable(coroutineScope = game.coroutineScope, repeat = Duration.ofMillis(50)) {
+
+        val task = object : MinestomRunnable(taskGroup = game.taskGroup, repeat = TaskSchedule.nextTick()) {
             var lastPos: Pos? = null
-            override suspend fun run() {
+            override fun run() {
                 if (pearl.velocity.x() == 0.0 || pearl.velocity.y() == 0.0 || pearl.velocity.z() == 0.0) {
                     lastPos?.let { player.teleport(it.withDirection(player.position.direction())) }
 

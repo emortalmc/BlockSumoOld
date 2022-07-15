@@ -61,17 +61,15 @@ import net.minestom.server.item.Material
 import net.minestom.server.item.firework.FireworkEffect
 import net.minestom.server.item.firework.FireworkEffectType
 import net.minestom.server.item.metadata.LeatherArmorMeta
-import net.minestom.server.message.Messenger.sendMessage
 import net.minestom.server.network.packet.server.play.EffectPacket
 import net.minestom.server.network.packet.server.play.TeamsPacket
 import net.minestom.server.scoreboard.Sidebar
 import net.minestom.server.sound.SoundEvent
+import net.minestom.server.timer.TaskSchedule
 import net.minestom.server.utils.Direction
 import net.minestom.server.utils.NamespaceID
 import world.cepi.kstom.Manager
-import world.cepi.kstom.adventure.color
 import world.cepi.kstom.event.listenOnly
-import world.cepi.kstom.item.item
 import world.cepi.kstom.util.asPos
 import world.cepi.kstom.util.asVec
 import world.cepi.kstom.util.playSound
@@ -101,6 +99,8 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     val spawnProtIndicatorTasks = ConcurrentHashMap<UUID, MinestomRunnable>()
 
     var borderSize = 40.0
+
+    var diamondBlockTime = 20L
 
     var eventTask: MinestomRunnable? = null
     var currentEvent: Event? = null
@@ -136,7 +136,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     override fun playerJoin(player: Player) {
 
         player.color = when (player.username) {
-            "GoldenStack" -> TeamColor.GOLD
+            "GoldenStack" -> TeamColor.YELLOW
             "Iternalplayer" -> TeamColor.RED
 
             else -> TeamColor.values().random()
@@ -151,9 +151,9 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         )
 
         if (player.username == "emortaldev") {
-            object : MinestomRunnable(coroutineScope = coroutineScope, repeat = Duration.ofMillis(50)) {
+            object : MinestomRunnable(taskGroup = taskGroup, repeat = TaskSchedule.nextTick()) {
                 var rainbow = 0f
-                override suspend fun run() {
+                override fun run() {
                     rainbow += 0.015f
                     if (rainbow >= 1f) {
                         rainbow = 0f
@@ -196,7 +196,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     }
 
     override fun playerLeave(player: Player) {
-        respawnTasks[player.uuid]?.cancelImmediate()
+        respawnTasks[player.uuid]?.cancel()
         player.cleanup()
 
         teams.firstOrNull { it.teamName == player.username }?.destroy()
@@ -224,6 +224,8 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             }
         }
 
+
+        val blockBreakTasks = ConcurrentHashMap<Point, MinestomRunnable>()
         listenOnly<PlayerBlockPlaceEvent> {
             consumeBlock(false)
 
@@ -237,9 +239,16 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 return@listenOnly
             }
 
-            if (blockPosition.distanceSquared(spawnPos.sub(0.5, 0.0, 0.5)) < 3*3) {
-                object : MinestomRunnable(delay = Duration.ofSeconds(5), coroutineScope = coroutineScope) {
-                    override suspend fun run() {
+            val heldItem = player.heldPowerup
+            if (heldItem?.interactType == PowerupInteractType.PLACE || heldItem?.interactType == PowerupInteractType.USE) {
+                isCancelled = true
+                heldItem.use(this@BlockSumoGame, player, blockPosition.add(0.5, 0.1, 0.5).asPos())
+                return@listenOnly
+            }
+
+            if (blockPosition.distanceSquared(spawnPos.sub(0.5, 0.0, 0.5)) < 3*3 && blockPosition.blockY() > (spawnPos.blockY() - 1)) {
+                blockBreakTasks[blockPosition] = object : MinestomRunnable(delay = Duration.ofSeconds(5), taskGroup = taskGroup) {
+                    override fun run() {
                         instance.setBlock(blockPosition, Block.AIR)
                         // Send the block break effect packet
                         sendGroupedPacket(
@@ -266,16 +275,11 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
                 return@listenOnly
             }
-
-            isCancelled = true
-
-            val heldItem = player.heldPowerup ?: return@listenOnly
-            if (heldItem.interactType != PowerupInteractType.PLACE && heldItem.interactType != PowerupInteractType.USE) return@listenOnly
-
-            heldItem.use(this@BlockSumoGame, player, blockPosition.add(0.5, 0.1, 0.5).asPos())
         }
 
         listenOnly<PlayerBlockBreakEvent> {
+            blockBreakTasks[blockPosition]?.cancel()
+            blockBreakTasks.remove(blockPosition)
             if (!block.name().contains("wool", true)) {
                 isCancelled = true
             }
@@ -336,7 +340,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             if (attacker.spawnProtectionMillis != 0L) {
                 attacker.playSound(Sound.sound(SoundEvent.ENTITY_GENERIC_EXTINGUISH_FIRE, Sound.Source.MASTER, 0.75f, 1f), attacker.position)
                 attacker.spawnProtectionMillis = 0L
-                spawnProtIndicatorTasks[attacker.uuid]?.cancelImmediate()
+                spawnProtIndicatorTasks[attacker.uuid]?.cancel()
                 spawnProtIndicatorTasks.remove(attacker.uuid)
             }
             if (entity.hasSpawnProtection) {
@@ -357,7 +361,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
             Manager.scheduler.buildTask {
                 entity.canBeHit = true
-            }.delay(Duration.ofMillis(500)).schedule()
+            }.delay(TaskSchedule.tick(10)).schedule()
         }
 
         listenOnly<EntityDamageEvent> {
@@ -440,11 +444,11 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 if (isOnDiamondBlock) {
                     diamondBlockPlayer = player
 
-                    diamondBlockTask = object : MinestomRunnable(repeat = Duration.ofSeconds(1), iterations = 20, coroutineScope = coroutineScope) {
-                        override suspend fun run() {
-                            val seconds = iterations - currentIteration.get()
+                    diamondBlockTask = object : MinestomRunnable(repeat = Duration.ofSeconds(1), iterations = diamondBlockTime, taskGroup = taskGroup) {
+                        override fun run() {
+                            val seconds = iterations - currentIteration
 
-                            if (seconds % 5 == 0 && seconds <= 15) {
+                            if (seconds % 5L == 0L && seconds <= 15L && seconds != diamondBlockTime) {
                                 playSound(
                                     Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_PLING, Sound.Source.MASTER, 1f, 1f),
                                     Sound.Emitter.self()
@@ -490,7 +494,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                             )
                             player.sendActionBar(
                                 Component.text()
-                                    .append(Component.text("$seconds second${if (seconds != 1) "s" else ""}", NamedTextColor.GOLD))
+                                    .append(Component.text("$seconds second${if (seconds != 1L) "s" else ""}", NamedTextColor.GOLD))
                                     .append(Component.text(" left until victory!", NamedTextColor.GRAY))
                             )
                         }
@@ -505,14 +509,13 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     }
 
     override fun gameStarted() {
-        // TODO: TNT Rain(?)
-        // TODO: Sky border
+        // TODO: Sky border?
 
         scoreboard?.removeLine("infoLine")
 
         eventTask =
-            object : MinestomRunnable(coroutineScope = coroutineScope, repeat = Duration.ofSeconds(120), delay = Duration.ofSeconds(120)) {
-                override suspend fun run() {
+            object : MinestomRunnable(taskGroup = taskGroup, repeat = Duration.ofSeconds(120), delay = Duration.ofSeconds(120)) {
+                override fun run() {
                     val randomEvent = Event.createRandomEvent()
 
                     currentEvent = randomEvent
@@ -521,14 +524,25 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 }
             }
 
-        // Border task
-        object : MinestomRunnable(coroutineScope = coroutineScope, delay = Duration.ofMinutes(3), repeat = Duration.ofSeconds(5)) {
+        // Border logic
+        val timeToSmall = 3 * 60 * 1000L
+
+        taskGroup.tasks.add(Manager.scheduler.buildTask {
+            diamondBlockTime = 10L
+            sendMessage(
+                Component.text()
+                    .append(Component.text("☠", NamedTextColor.GOLD))
+                    .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
+                    .append(Component.text("The border has finished shrinking! Diamond block time is now 10 seconds!", NamedTextColor.GOLD))
+            )
+        }.delay(Duration.ofMillis(timeToSmall + 3 * 60 * 1000L)).schedule())
+
+        object : MinestomRunnable(taskGroup = taskGroup, delay = Duration.ofMinutes(3), repeat = Duration.ofSeconds(5)) {
             var startTimestamp: Long = 0
-            val timeToSmall = 3 * 60 * 1000L
             var setBorder = false
             val originalBorderSize = borderSize
 
-            override suspend fun run() {
+            override fun run() {
                 if (!setBorder) {
                     setBorder = true
                     instance.worldBorder.setCenter(0.5f, 0.5f)
@@ -537,11 +551,13 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                     instance.worldBorder.setDiameter(7.0, timeToSmall)
                     startTimestamp = System.currentTimeMillis()
 
+                    diamondBlockTime = 15L
+
                     sendMessage(
                         Component.text()
                             .append(Component.text("☠", NamedTextColor.GOLD))
                             .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
-                            .append(Component.text("The border has been activated!", NamedTextColor.GOLD))
+                            .append(Component.text("The border has been activated! Diamond block time is now 15 seconds!", NamedTextColor.GOLD))
                     )
 
                     playSound(
@@ -559,8 +575,8 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         }
 
         // Item loop task
-        object : MinestomRunnable(coroutineScope = coroutineScope, delay = Duration.ofSeconds(10), repeat = Duration.ofSeconds(30)) {
-            override suspend fun run() {
+        object : MinestomRunnable(taskGroup = taskGroup, delay = Duration.ofSeconds(10), repeat = Duration.ofSeconds(30)) {
+            override fun run() {
                 val powerup = Powerup.randomWithRarity(SpawnType.MIDDLE).createItemStack()
                 val itemEntity = ItemEntity(powerup)
                 val itemEntityMeta = itemEntity.entityMeta
@@ -596,8 +612,8 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         }
 
         // Inv item loop task
-        object : MinestomRunnable(coroutineScope = coroutineScope, delay = Duration.ofSeconds(5), repeat = Duration.ofSeconds(45)){
-            override suspend fun run() {
+        object : MinestomRunnable(taskGroup = taskGroup, delay = Duration.ofSeconds(5), repeat = Duration.ofSeconds(45)){
+            override fun run() {
                 val powerup = Powerup.randomWithRarity(SpawnType.EVERYWHERE)
 
                 players
@@ -726,10 +742,9 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
         updateScoreboard(player)
 
-        respawnTasks[player.uuid] = object : MinestomRunnable(delay = Duration.ofSeconds(2), repeat = Duration.ofSeconds(1), iterations = 3, coroutineScope = coroutineScope) {
-            override suspend fun run() {
-                val currentIter = currentIteration.get()
-                if (currentIter == 1) {
+        respawnTasks[player.uuid] = object : MinestomRunnable(delay = Duration.ofSeconds(2), repeat = Duration.ofSeconds(1), iterations = 3L, taskGroup = taskGroup) {
+            override fun run() {
+                if (currentIteration == 1L) {
                     if (killer != null && killer is Player) player.spectate(killer)
                 }
 
@@ -740,7 +755,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 )
                 player.showTitle(
                     Title.title(
-                        Component.text(iterations - currentIter, NamedTextColor.GOLD, TextDecoration.BOLD),
+                        Component.text(iterations - currentIteration, NamedTextColor.GOLD, TextDecoration.BOLD),
                         Component.empty(),
                         Title.Times.times(
                             Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(1)
@@ -787,15 +802,13 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         lastDamageTimestamp = 0
         setCanPickupItem(true)
 
-        spawnProtIndicatorTasks[uuid] = object : MinestomRunnable(repeat = Duration.ofMillis(100), coroutineScope = coroutineScope, iterations = 4000/100) {
+        spawnProtIndicatorTasks[uuid] = object : MinestomRunnable(repeat = TaskSchedule.tick(2), taskGroup = taskGroup, iterations = 4000L/100L) {
             var startingSecs = 4
             var i = 0.0
-            override suspend fun run() {
-                val currentIter = currentIteration.get()
-
+            override fun run() {
                 i += 0.1
 
-                if (currentIter % 10 == 0) {
+                if (currentIteration % 10L == 0L) {
                     startingSecs--
 
                     player.sendActionBar(
@@ -932,9 +945,10 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         eventTask?.cancel()
         currentEvent?.eventEnded(this)
 
-        object : MinestomRunnable(repeat = Duration.ofMillis(500), coroutineScope = coroutineScope, iterations = 5*2) {
-            val random = ThreadLocalRandom.current()
-            override suspend fun run() {
+        object : MinestomRunnable(repeat = TaskSchedule.tick(10), taskGroup = taskGroup, iterations = 5L*2L) {
+            override fun run() {
+                val random = ThreadLocalRandom.current()
+
                 val effects = mutableListOf(
                     FireworkEffect(
                         random.nextBoolean(),
