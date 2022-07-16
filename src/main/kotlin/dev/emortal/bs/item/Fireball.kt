@@ -47,9 +47,9 @@ object Fireball : Powerup(
 
         // removal task
         game.taskGroup.tasks.add(Manager.scheduler.buildTask {
+            BlockSumoExtension.taskMap[fireBall]?.cancel()
+            BlockSumoExtension.taskMap.remove(fireBall)
             fireBall.remove()
-            BlockSumoExtension.taskMap[entity]?.cancel()
-            BlockSumoExtension.taskMap.remove(entity)
         }.delay(Duration.ofSeconds(20)).schedule())
 
         val instance = player.instance!!

@@ -234,7 +234,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 return@listenOnly
             }
 
-            if (blockPosition.y() > 90 || blockPosition.y() < 51.5) {
+            if (blockPosition.y() > 80 || blockPosition.y() < 51.5) {
                 isCancelled = true
                 return@listenOnly
             }
@@ -519,6 +519,10 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                     val randomEvent = Event.createRandomEvent()
 
                     currentEvent = randomEvent
+
+                    taskGroup.tasks.add(Manager.scheduler.buildTask {
+                        currentEvent = null
+                    }.delay(randomEvent.duration).schedule())
 
                     randomEvent.performEvent(this@BlockSumoGame)
                 }
