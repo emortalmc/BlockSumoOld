@@ -10,7 +10,6 @@ import net.minestom.server.item.ItemMeta
 import net.minestom.server.item.ItemStack
 import net.minestom.server.item.Material
 import net.minestom.server.tag.Tag
-import world.cepi.kstom.item.item
 import java.util.concurrent.ThreadLocalRandom
 
 sealed class Powerup(
@@ -20,7 +19,8 @@ sealed class Powerup(
     rarity: Rarity,
     val interactType: PowerupInteractType,
     val spawnType: SpawnType,
-    itemCreate: (ItemMeta.Builder) -> Unit = { }
+    itemCreate: (ItemMeta.Builder) -> Unit = { },
+    var amount: Int = 1
 ) : Item(id, material, rarity, itemCreate) {
 
     companion object {
@@ -67,13 +67,15 @@ sealed class Powerup(
     }
 
     override fun createItemStack(): ItemStack {
-        return ItemStack.builder(material).meta {
-            it.displayName(name.decoration(TextDecoration.ITALIC, false))
-            it.setTag(itemIdTag, id)
-            it.lore(rarity.component.decoration(TextDecoration.ITALIC, false))
-            itemCreate.invoke(it)
-            it
-        }.build()
+        return ItemStack.builder(material)
+            .amount(amount)
+            .meta {
+                it.displayName(name.decoration(TextDecoration.ITALIC, false))
+                it.setTag(itemIdTag, id)
+                it.lore(rarity.component.decoration(TextDecoration.ITALIC, false))
+                itemCreate.invoke(it)
+                it
+            }.build()
     }
 
     fun removeOne(player: Player) {

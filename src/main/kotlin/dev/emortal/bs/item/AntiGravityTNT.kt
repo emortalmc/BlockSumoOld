@@ -45,7 +45,7 @@ object AntiGravityTNT : Powerup(
 
         val instance = player.instance!!
 
-        tntEntity.setInstance(instance, pos)
+        tntEntity.setInstance(instance, pos.sub(0.0, 0.4, 0.0))
 
         game.playSound(Sound.sound(SoundEvent.ENTITY_TNT_PRIMED, Sound.Source.BLOCK, 2f, 1f), pos)
 
@@ -53,6 +53,8 @@ object AntiGravityTNT : Powerup(
             override fun run() {
                 if (tntEntity.position.y > 80) {
                     tntEntity.velocity = Vec.ZERO
+                } else {
+                    tntEntity.velocity = Vec(0.0, 7.0, 0.0)
                 }
             }
 

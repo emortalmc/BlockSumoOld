@@ -32,7 +32,7 @@ class MapClearEvent : Event() {
             )
         )
 
-        object : MinestomRunnable(repeat = TaskSchedule.tick(2), taskGroup = game.taskGroup, iterations = 80L-63L) {
+        object : MinestomRunnable(repeat = TaskSchedule.tick(3), taskGroup = game.taskGroup, iterations = 80L-63L) {
             override fun run() {
                 val batch = AbsoluteBlockBatch()
                 val size = 19

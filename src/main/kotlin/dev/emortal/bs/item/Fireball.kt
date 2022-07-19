@@ -1,6 +1,5 @@
 package dev.emortal.bs.item
 
-import dev.emortal.bs.BlockSumoExtension
 import dev.emortal.bs.game.BlockSumoGame
 import dev.emortal.bs.util.SphereUtil
 import dev.emortal.immortal.util.MinestomRunnable
@@ -13,14 +12,12 @@ import net.minestom.server.item.Material
 import net.minestom.server.sound.SoundEvent
 import net.minestom.server.timer.Task
 import net.minestom.server.timer.TaskSchedule
-import world.cepi.kstom.Manager
 import world.cepi.kstom.adventure.asMini
 import world.cepi.kstom.util.playSound
 import world.cepi.particle.Particle
 import world.cepi.particle.ParticleType
 import world.cepi.particle.data.OffsetAndSpeed
 import world.cepi.particle.showParticle
-import java.time.Duration
 
 object Fireball : Powerup(
     "<gold>Fireball".asMini(),
@@ -45,13 +42,6 @@ object Fireball : Powerup(
         val originalVelocity = player.position.direction().normalize().mul(20.0)
         fireBall.velocity = originalVelocity
 
-        // removal task
-        game.taskGroup.tasks.add(Manager.scheduler.buildTask {
-            BlockSumoExtension.taskMap[fireBall]?.cancel()
-            BlockSumoExtension.taskMap.remove(fireBall)
-            fireBall.remove()
-        }.delay(Duration.ofSeconds(20)).schedule())
-
         val instance = player.instance!!
 
         fireBall.setInstance(instance, player.position.add(0.0, 1.0, 0.0))
@@ -61,7 +51,7 @@ object Fireball : Powerup(
             player.position
         )
 
-        val task = object : MinestomRunnable(taskGroup = game.taskGroup, repeat = TaskSchedule.nextTick()) {
+        val task = object : MinestomRunnable(taskGroup = game.taskGroup, repeat = TaskSchedule.nextTick(), iterations = 10L*20L) {
             override fun run() {
                 if (fireBall.velocity.x() == 0.0 || fireBall.velocity.y() == 0.0 || fireBall.velocity.z() == 0.0) {
                     collide(game, fireBall)
@@ -86,16 +76,16 @@ object Fireball : Powerup(
                 )
                 fireBall.velocity = originalVelocity
             }
-        }
 
-        BlockSumoExtension.taskMap[fireBall] = task
+            override fun cancelled() {
+                fireBall.remove()
+            }
+
+        }
     }
 
     override fun collide(game: BlockSumoGame, entity: Entity) {
         game.explode(entity.position, 3, 40.0, 6.0, true, entity)
-
-        BlockSumoExtension.taskMap[entity]?.cancel()
-        BlockSumoExtension.taskMap.remove(entity)
 
         entity.remove()
     }

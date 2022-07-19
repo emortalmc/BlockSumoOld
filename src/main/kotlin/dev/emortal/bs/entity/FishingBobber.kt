@@ -4,7 +4,6 @@ import dev.emortal.bs.game.BlockSumoGame
 import dev.emortal.bs.game.BlockSumoPlayerHelper.canBeHit
 import dev.emortal.bs.game.BlockSumoPlayerHelper.hasSpawnProtection
 import dev.emortal.bs.item.Powerup.Companion.heldPowerup
-import dev.emortal.immortal.util.takeKnockback
 import net.minestom.server.coordinate.Vec
 import net.minestom.server.entity.Entity
 import net.minestom.server.entity.EntityType
@@ -69,7 +68,6 @@ class FishingBobber(val shooter: Player, val game: BlockSumoGame) : Entity(Entit
             hookedEntity = hitPlayer
             hookedPlayer[shooter.uuid] = hitPlayer
             if (hitPlayer.canBeHit && !hitPlayer.hasSpawnProtection)  {
-                hitPlayer.takeKnockback(shooter)
                 hitPlayer.damage(DamageType.fromPlayer(shooter), 0f)
             }
         }

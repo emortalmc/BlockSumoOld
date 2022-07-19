@@ -5,6 +5,7 @@ import dev.emortal.rayfast.area.area3d.Area3d
 import dev.emortal.rayfast.area.area3d.Area3dRectangularPrism
 import dev.emortal.rayfast.casting.grid.GridCast
 import dev.emortal.rayfast.vector.Vector3d
+import net.minestom.server.collision.BoundingBox
 import net.minestom.server.coordinate.Point
 import net.minestom.server.coordinate.Pos
 import net.minestom.server.coordinate.Vec
@@ -20,17 +21,17 @@ import world.cepi.kstom.util.component3
  */
 object RaycastUtil {
 
-    private val boundingBoxToArea3dMap = HashMap<LinkedBoundingBox, Area3d>()
+    private val boundingBoxToArea3dMap = HashMap<BoundingBox, Area3d>()
 
 
     init {
-        Area3d.CONVERTER.register(LinkedBoundingBox::class.java) { box ->
+        Area3d.CONVERTER.register(BoundingBox::class.java) { box ->
 
             boundingBoxToArea3dMap.computeIfAbsent(box) { it ->
                 Area3dRectangularPrism.wrapper(
                     it,
-                    { it.minX - 0.5 }, { it.minY - 0.5 }, { it.minZ - 0.5 },
-                    { it.maxX + 0.5 }, { it.maxY + 0.5 }, { it.maxZ + 0.5 }
+                    { it.minX() - 0.5 }, { it.minY() - 0.5 }, { it.minZ() - 0.5 },
+                    { it.maxX() + 0.5 }, { it.maxY() + 0.5 }, { it.maxZ() + 0.5 }
                 )
             }
 
@@ -40,7 +41,7 @@ object RaycastUtil {
 
 
     val Entity.area3d: Area3d
-        get() = Area3d.CONVERTER.from(boundingBox.toLinked(this))
+        get() = Area3d.CONVERTER.from(boundingBox)
 
     fun Entity.fastHasLineOfSight(entity: Entity): Boolean {
         val (x, y, z) = this
@@ -93,15 +94,16 @@ object RaycastUtil {
             .filter { it.position.distanceSquared(startPoint) <= maxDistance * maxDistance }
             .forEach {
                 val area = it.area3d
+                val pos = it.position
 
                 //val intersection = it.boundingBox.boundingBoxRayIntersectionCheck(startPoint.asVec(), direction, it.position)
 
                 val intersection = area.lineIntersection(
-                    Vector3d.of(startPoint.x(), startPoint.y(), startPoint.z()),
+                    Vector3d.of(startPoint.x() - pos.x, startPoint.y() - pos.y, startPoint.z() - pos.z),
                     Vector3d.of(direction.x(), direction.y(), direction.z())
                 )
                 if (intersection != null) {
-                    return Pair(it, Pos(intersection[0], intersection[1], intersection[2]))
+                    return Pair(it, Pos(intersection[0] + pos.x, intersection[1] + pos.y, intersection[2] + pos.z))
                 }
             }
 
