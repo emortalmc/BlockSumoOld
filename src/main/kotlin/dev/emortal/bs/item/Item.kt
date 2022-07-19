@@ -6,7 +6,6 @@ import net.minestom.server.item.ItemMeta
 import net.minestom.server.item.ItemStack
 import net.minestom.server.item.Material
 import net.minestom.server.tag.Tag
-import world.cepi.kstom.item.item
 import java.util.concurrent.ThreadLocalRandom
 
 sealed class Item(
