@@ -20,10 +20,10 @@ object GrapplingHook : Powerup(
 ) {
 
     // When fishing rod retracted
-    override fun use(game: BlockSumoGame, player: Player, pos: Pos?, entity: Entity?) {
+    override fun use(game: BlockSumoGame, player: Player, hand: Player.Hand, pos: Pos?, entity: Entity?) {
         if (pos == null) return
 
-        removeOne(player)
+        removeOne(player, hand)
 
         player.instance!!.playSound(
             Sound.sound(SoundEvent.ENTITY_FISHING_BOBBER_RETRIEVE, Sound.Source.PLAYER, 1f, 1f),

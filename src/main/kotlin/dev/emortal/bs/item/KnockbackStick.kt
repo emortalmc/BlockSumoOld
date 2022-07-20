@@ -23,8 +23,8 @@ object KnockbackStick : Powerup(
     }
 ) {
 
-    override fun use(game: BlockSumoGame, player: Player, pos: Pos?, entity: Entity?) {
-        removeOne(player)
+    override fun use(game: BlockSumoGame, player: Player, hand: Player.Hand, pos: Pos?, entity: Entity?) {
+        removeOne(player, hand)
 
         player.playSound(Sound.sound(SoundEvent.ENTITY_ITEM_BREAK, Sound.Source.PLAYER, 1f, 1f))
 

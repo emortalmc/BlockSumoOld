@@ -1,7 +1,6 @@
 package dev.emortal.bs.commands
 
 import dev.emortal.bs.item.Powerup
-import dev.emortal.bs.item.Powerup.Companion.heldPowerup
 import dev.emortal.immortal.luckperms.PermissionUtils.hasLuckPermission
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
@@ -34,7 +33,7 @@ object PowerupCommand : Kommand({
             return@syntax
         }
         val gun = context.get(powerupArg).joinToString(separator = " ")
-        player.heldPowerup = Powerup.registeredMap[gun]
+        player.itemInMainHand = Powerup.registeredMap[gun]?.createItemStack()!!
     }
 
 }, "powerup")

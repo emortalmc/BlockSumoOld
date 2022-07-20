@@ -31,8 +31,8 @@ object Fireball : Powerup(
     val sphere = SphereUtil.getBlocksInSphere(3)
     val entityTaskMap = hashMapOf<Entity, Task>()
 
-    override fun use(game: BlockSumoGame, player: Player, pos: Pos?, entity: Entity?) {
-        removeOne(player)
+    override fun use(game: BlockSumoGame, player: Player, hand: Player.Hand, pos: Pos?, entity: Entity?) {
+        removeOne(player, hand)
 
         val fireBall = Entity(EntityType.FIREBALL)
         fireBall.setNoGravity(true)

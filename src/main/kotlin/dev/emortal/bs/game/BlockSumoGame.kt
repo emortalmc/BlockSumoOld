@@ -1,5 +1,7 @@
 package dev.emortal.bs.game
 
+import dev.emortal.bs.BlockSumoExtension
+import dev.emortal.bs.db.MongoStorage
 import dev.emortal.bs.entity.FishingBobber
 import dev.emortal.bs.event.Event
 import dev.emortal.bs.game.BlockSumoPlayerHelper.canBeHit
@@ -12,7 +14,7 @@ import dev.emortal.bs.game.BlockSumoPlayerHelper.lastDamageTimestamp
 import dev.emortal.bs.game.BlockSumoPlayerHelper.lives
 import dev.emortal.bs.game.BlockSumoPlayerHelper.spawnProtectionMillis
 import dev.emortal.bs.item.Powerup
-import dev.emortal.bs.item.Powerup.Companion.heldPowerup
+import dev.emortal.bs.item.Powerup.Companion.getHeldPowerup
 import dev.emortal.bs.item.PowerupInteractType
 import dev.emortal.bs.item.Shears
 import dev.emortal.bs.item.SpawnType
@@ -27,6 +29,7 @@ import dev.emortal.immortal.util.MinestomRunnable
 import dev.emortal.immortal.util.armify
 import dev.emortal.immortal.util.reset
 import dev.emortal.immortal.util.takeKnockback
+import kotlinx.coroutines.launch
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.sound.Sound.Emitter
 import net.kyori.adventure.text.Component
@@ -65,6 +68,7 @@ import net.minestom.server.network.packet.server.play.EffectPacket
 import net.minestom.server.network.packet.server.play.TeamsPacket
 import net.minestom.server.scoreboard.Sidebar
 import net.minestom.server.sound.SoundEvent
+import net.minestom.server.tag.Tag
 import net.minestom.server.timer.TaskSchedule
 import net.minestom.server.utils.Direction
 import net.minestom.server.utils.NamespaceID
@@ -89,6 +93,12 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
+
+    companion object {
+        val loadoutNotificationTag = Tag.Boolean("hadNotification")
+        val woolSlot = Tag.Integer("woolSlot")
+        val shearsSlot = Tag.Integer("shearsSlot")
+    }
 
     val spawnPos = Pos(0.5, 65.0, 0.5)
 
@@ -141,7 +151,6 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
             else -> TeamColor.values().random()
         }
-
 
         val newTeam = registerTeam(Team(player.username, player.color.color, TeamsPacket.CollisionRule.NEVER))
         newTeam.add(player)
@@ -214,13 +223,22 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         listenOnly<ItemDropEvent> {
             isCancelled = true
         }
-        listenOnly<PlayerSwapItemEvent> {
-            isCancelled = true
-        }
 
         listenOnly<InventoryPreClickEvent> {
-            if ((100..103).contains(slot)) {
+            if ((41..44).contains(slot)) {
                 isCancelled = true
+            }
+
+            // TODO: change to current player values
+            if ((clickedItem.material().name().endsWith("wool", ignoreCase = true) || clickedItem.material() == Material.SHEARS) && !player.hasTag(loadoutNotificationTag)) {
+                player.setTag(loadoutNotificationTag, true)
+                player.sendMessage(
+                    Component.text()
+                        .append(Component.text("We noticed you changed your loudout slot.", NamedTextColor.LIGHT_PURPLE))
+                        .append(Component.text(" Use the command ", NamedTextColor.GRAY))
+                        .append(Component.text("/saveloudout", NamedTextColor.LIGHT_PURPLE))
+                        .append(Component.text(" to save your loudout.", NamedTextColor.GRAY))
+                )
             }
         }
 
@@ -239,10 +257,10 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 return@listenOnly
             }
 
-            val heldItem = player.heldPowerup
+            val heldItem = player.getHeldPowerup(hand)
             if (heldItem?.interactType == PowerupInteractType.PLACE || heldItem?.interactType == PowerupInteractType.USE) {
                 isCancelled = true
-                heldItem.use(this@BlockSumoGame, player, blockPosition.add(0.5, 0.1, 0.5).asPos())
+                heldItem.use(this@BlockSumoGame, player, hand, blockPosition.add(0.5, 0.1, 0.5).asPos())
                 return@listenOnly
             }
 
@@ -286,16 +304,14 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         }
 
         listenOnly<PlayerUseItemEvent> {
-            if (hand != Player.Hand.MAIN) return@listenOnly
-
             isCancelled = true
-            val heldItem = player.heldPowerup ?: return@listenOnly
+            val heldItem = player.getHeldPowerup(hand) ?: return@listenOnly
 
             if (heldItem.id == "grapplehook") {
                 isCancelled = false
 
                 if (FishingBobber.bobbers.containsKey(player.uuid)) {
-                    FishingBobber.bobbers[player.uuid]?.retract()
+                    FishingBobber.bobbers[player.uuid]?.retract(hand)
                     return@listenOnly
                 }
 
@@ -307,24 +323,23 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
                 val bobberEntity = FishingBobber(player, this@BlockSumoGame)
                 bobberEntity.setInstance(player.instance!!, Pos(x, y, z))
-                bobberEntity.throwBobber()
+                bobberEntity.throwBobber(hand)
 
                 return@listenOnly
             }
 
             if (heldItem.interactType != PowerupInteractType.USE) return@listenOnly
 
-            heldItem.use(this@BlockSumoGame, player, null)
+            heldItem.use(this@BlockSumoGame, player, hand, null)
         }
 
         listenOnly<PlayerUseItemOnBlockEvent> {
-            if (hand != Player.Hand.MAIN) return@listenOnly
             //if (!player.inventory.itemInMainHand.meta.hasTag(Item.itemIdTag)) return@listenOnly
 
-            val heldItem = player.heldPowerup ?: return@listenOnly
+            val heldItem = player.getHeldPowerup(hand) ?: return@listenOnly
             if (heldItem.interactType != PowerupInteractType.USE) return@listenOnly
 
-            heldItem.use(this@BlockSumoGame, player, null)
+            heldItem.use(this@BlockSumoGame, player, hand, null)
         }
 
         listenOnly<EntityAttackEvent> {
@@ -354,9 +369,9 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             entity.damage(DamageType.fromPlayer(attacker), 0f)
             entity.takeKnockback(attacker)
 
-            val heldItem = attacker.heldPowerup
+            val heldItem = attacker.getHeldPowerup(Player.Hand.MAIN)
             if (heldItem != null && heldItem.interactType == PowerupInteractType.ATTACK) {
-                heldItem.use(this@BlockSumoGame, attacker, null, target)
+                heldItem.use(this@BlockSumoGame, attacker, Player.Hand.MAIN, null, target)
             }
 
             Manager.scheduler.buildTask {
@@ -392,7 +407,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         }
 
         listenOnly<PlayerTickEvent> {
-            if (player.gameMode != GameMode.SURVIVAL) {
+            if (player.gameMode != GameMode.SURVIVAL || gameState == GameState.ENDING) {
                 if (player.position.y() < -64) player.teleport(spawnPos)
                 return@listenOnly
             }
@@ -775,7 +790,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
     }
 
-    override fun respawn(player: Player) = with(player) {
+    override fun respawn(player: Player): Unit = with(player) {
         reset()
         teleport(getRandomRespawnPosition()).thenRun {
             gameMode = GameMode.SURVIVAL
@@ -837,15 +852,34 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             }
         }
 
-        inventory.setItemStack(1, ItemStack.builder(color.woolMaterial).amount(64).build())
-        inventory.setItemStack(2, Shears.createItemStack())
 
+        if (!player.hasTag(woolSlot)) {
+            MongoStorage.mongoScope.launch {
+                val settings = BlockSumoExtension.mongoStorage?.getSettings(player.uuid)
+                if (settings != null) {
+                    player.setTag(woolSlot, settings.woolSlot)
+                    player.setTag(shearsSlot, settings.shearsSlot)
+                } else {
+                    player.setTag(woolSlot, 1)
+                    player.setTag(shearsSlot, 2)
+                }
+
+                player.scheduleNextTick {
+                    inventory.setItemStack(player.getTag(woolSlot), ItemStack.builder(color.woolMaterial).amount(64).build())
+                    inventory.setItemStack(player.getTag(shearsSlot), Shears.createItemStack())
+                }
+            }
+        } else {
+            inventory.setItemStack(player.getTag(woolSlot), ItemStack.builder(color.woolMaterial).amount(64).build())
+            inventory.setItemStack(player.getTag(shearsSlot), Shears.createItemStack())
+        }
     }
 
     override fun gameDestroyed() {
         diamondBlockTask?.cancel()
 
         players.forEach {
+            it.removeTag(loadoutNotificationTag)
             it.cleanup()
         }
     }

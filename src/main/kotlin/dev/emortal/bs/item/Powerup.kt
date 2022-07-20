@@ -6,6 +6,7 @@ import net.kyori.adventure.text.format.TextDecoration
 import net.minestom.server.coordinate.Pos
 import net.minestom.server.entity.Entity
 import net.minestom.server.entity.Player
+import net.minestom.server.entity.Player.Hand
 import net.minestom.server.item.ItemMeta
 import net.minestom.server.item.ItemStack
 import net.minestom.server.item.Material
@@ -28,15 +29,7 @@ sealed class Powerup(
 
         val entityShooterTag = Tag.String("entityShooter")
 
-        var Player.heldPowerup: Powerup?
-            get() = itemInMainHand.getPowerup
-            set(value) {
-                if (value == null) {
-                    itemInMainHand = ItemStack.AIR
-                    return
-                }
-                itemInMainHand = value.createItemStack()
-            }
+        fun Player.getHeldPowerup(hand: Hand): Powerup? = getItemInHand(hand).getPowerup
         val ItemStack.getPowerup: Powerup?
             get() = registeredMap[getTag(itemIdTag)]
 
@@ -61,7 +54,7 @@ sealed class Powerup(
         }
     }
 
-    abstract fun use(game: BlockSumoGame, player: Player, pos: Pos?, entity: Entity? = null)
+    abstract fun use(game: BlockSumoGame, player: Player, hand: Hand, pos: Pos?, entity: Entity? = null)
     open fun collide(game: BlockSumoGame, entity: Entity) {
 
     }
@@ -78,9 +71,9 @@ sealed class Powerup(
             }.build()
     }
 
-    fun removeOne(player: Player) {
-        val itemInHand = player.inventory.itemInMainHand
-        player.inventory.itemInMainHand = itemInHand.withAmount(itemInHand.amount() - 1)
+    fun removeOne(player: Player, hand: Hand) {
+        val itemInHand = player.getItemInHand(hand)
+        player.setItemInHand(hand, itemInHand.withAmount(itemInHand.amount() - 1))
     }
 
 }

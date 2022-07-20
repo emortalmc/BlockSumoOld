@@ -3,12 +3,13 @@ package dev.emortal.bs.entity
 import dev.emortal.bs.game.BlockSumoGame
 import dev.emortal.bs.game.BlockSumoPlayerHelper.canBeHit
 import dev.emortal.bs.game.BlockSumoPlayerHelper.hasSpawnProtection
-import dev.emortal.bs.item.Powerup.Companion.heldPowerup
+import dev.emortal.bs.item.Powerup.Companion.getHeldPowerup
 import net.minestom.server.coordinate.Vec
 import net.minestom.server.entity.Entity
 import net.minestom.server.entity.EntityType
 import net.minestom.server.entity.GameMode
 import net.minestom.server.entity.Player
+import net.minestom.server.entity.Player.Hand
 import net.minestom.server.entity.damage.DamageType
 import net.minestom.server.entity.metadata.other.FishingHookMeta
 import net.minestom.server.item.Material
@@ -74,9 +75,9 @@ class FishingBobber(val shooter: Player, val game: BlockSumoGame) : Entity(Entit
 
     }
 
-    fun retract() {
-        val powerup = shooter.heldPowerup
-        powerup?.use(game, shooter, getPosition(), hookedPlayer[shooter.uuid])
+    fun retract(hand: Hand) {
+        val powerup = shooter.getHeldPowerup(hand)
+        powerup?.use(game, shooter, hand, getPosition(), hookedPlayer[shooter.uuid])
 
         remove()
         ownerEntity = null
@@ -85,12 +86,12 @@ class FishingBobber(val shooter: Player, val game: BlockSumoGame) : Entity(Entit
         bobbers.remove(shooter.uuid)
     }
 
-    fun throwBobber() {
+    fun throwBobber(hand: Hand) {
         if (bobbers.containsKey(shooter.uuid)) {
-            retract()
+            retract(hand)
             return
         }
-        bobbers[shooter.uuid]?.retract()
+        bobbers[shooter.uuid]?.retract(hand)
         bobbers[shooter.uuid] = this
 
         val playerPos = shooter.position

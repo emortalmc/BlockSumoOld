@@ -24,8 +24,8 @@ object Puncher : Powerup(
     }
 ) {
 
-    override fun use(game: BlockSumoGame, player: Player, pos: Pos?, entity: Entity?) {
-        removeOne(player)
+    override fun use(game: BlockSumoGame, player: Player, hand: Player.Hand, pos: Pos?, entity: Entity?) {
+        removeOne(player, hand)
 
         game.playSound(Sound.sound(SoundEvent.ENTITY_PLAYER_ATTACK_CRIT, Sound.Source.PLAYER, 1f, 1f), player.position)
 

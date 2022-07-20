@@ -29,8 +29,8 @@ object EnderPearl : Powerup(
     SpawnType.MIDDLE
 ) {
 
-    override fun use(game: BlockSumoGame, player: Player, pos: Pos?, entity: Entity?) {
-        removeOne(player)
+    override fun use(game: BlockSumoGame, player: Player, hand: Player.Hand, pos: Pos?, entity: Entity?) {
+        removeOne(player, hand)
 
         val pearl = EntityProjectile(player, EntityType.ENDER_PEARL)
         pearl.setTag(itemIdTag, id)

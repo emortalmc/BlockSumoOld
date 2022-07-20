@@ -25,12 +25,12 @@ object AntiGravityTNT : Powerup(
     SpawnType.EVERYWHERE
 ) {
 
-    override fun use(game: BlockSumoGame, player: Player, pos: Pos?, entity: Entity?) {
+    override fun use(game: BlockSumoGame, player: Player, hand: Player.Hand, pos: Pos?, entity: Entity?) {
         if (pos == null) {
             return
         }
 
-        removeOne(player)
+        removeOne(player, hand)
 
         val tntEntity = Entity(EntityType.TNT)
         val tntMeta = tntEntity.entityMeta as PrimedTntMeta

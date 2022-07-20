@@ -9,6 +9,7 @@ import net.minestom.server.coordinate.Pos
 import net.minestom.server.entity.Entity
 import net.minestom.server.entity.EntityType
 import net.minestom.server.entity.Player
+import net.minestom.server.entity.Player.Hand
 import net.minestom.server.entity.metadata.other.PrimedTntMeta
 import net.minestom.server.item.Material
 import net.minestom.server.sound.SoundEvent
@@ -27,12 +28,12 @@ object TNT : Powerup(
 
     val sphere = SphereUtil.getBlocksInSphere(4)
 
-    override fun use(game: BlockSumoGame, player: Player, pos: Pos?, entity: Entity?) {
+    override fun use(game: BlockSumoGame, player: Player, hand: Hand, pos: Pos?, entity: Entity?) {
         if (pos == null) {
             return
         }
 
-        removeOne(player)
+        removeOne(player, hand)
 
         val tntEntity = Entity(EntityType.TNT)
         val tntMeta = tntEntity.entityMeta as PrimedTntMeta

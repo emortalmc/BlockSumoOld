@@ -24,8 +24,8 @@ object WitherSkull : Powerup(
     amount = 5
 ) {
 
-    override fun use(game: BlockSumoGame, player: Player, pos: Pos?, entity: Entity?) {
-        removeOne(player)
+    override fun use(game: BlockSumoGame, player: Player, hand: Player.Hand, pos: Pos?, entity: Entity?) {
+        removeOne(player, hand)
 
         val skull = EntityProjectile(player, EntityType.WITHER_SKULL)
         skull.setTag(itemIdTag, id)
