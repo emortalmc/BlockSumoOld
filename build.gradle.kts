@@ -18,7 +18,7 @@ dependencies {
     compileOnly("com.github.EmortalMC:Immortal:cd2475004d")
 
     compileOnly("org.litote.kmongo:kmongo-coroutine-serialization:4.6.1")
-    compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.3.3")
+    compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.4.0")
     compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.2")
 }
 
