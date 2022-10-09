@@ -111,7 +111,7 @@ class FishingBobber(val shooter: Player, val game: BlockSumoGame) : Entity(Entit
     }
 
     fun shouldStopFishing(player: Player): Boolean {
-        val main = player.itemInMainHand.material() == Material.FISHING_ROD
+        val main = player.itemInMainHand.material() == Material.FISHING_ROD || player.itemInOffHand.material() == Material.FISHING_ROD
         if (player.isDead || !main) return true
         if (hookedEntity != null) {
             if (hookedEntity!!.isRemoved || hookedEntity!!.gameMode != GameMode.SURVIVAL) return true

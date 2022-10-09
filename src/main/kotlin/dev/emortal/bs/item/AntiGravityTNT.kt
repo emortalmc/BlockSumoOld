@@ -59,7 +59,7 @@ object AntiGravityTNT : Powerup(
             }
 
             override fun cancelled() {
-                game.explode(tntEntity.position, 3, 40.0, 6.0, true, tntEntity)
+                game.explode(tntEntity.position, 3, 35.0, 5.5, true, tntEntity)
 
                 tntEntity.remove()
             }

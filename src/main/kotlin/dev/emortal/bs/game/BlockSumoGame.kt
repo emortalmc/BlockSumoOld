@@ -19,16 +19,11 @@ import dev.emortal.bs.item.PowerupInteractType
 import dev.emortal.bs.item.Shears
 import dev.emortal.bs.item.SpawnType
 import dev.emortal.bs.util.SphereUtil
-import dev.emortal.bs.util.showFirework
-import dev.emortal.bs.util.showFireworkWithDuration
 import dev.emortal.immortal.config.GameOptions
 import dev.emortal.immortal.game.GameState
 import dev.emortal.immortal.game.PvpGame
 import dev.emortal.immortal.game.Team
-import dev.emortal.immortal.util.MinestomRunnable
-import dev.emortal.immortal.util.armify
-import dev.emortal.immortal.util.reset
-import dev.emortal.immortal.util.takeKnockback
+import dev.emortal.immortal.util.*
 import kotlinx.coroutines.launch
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.sound.Sound.Emitter
@@ -65,17 +60,16 @@ import net.minestom.server.item.firework.FireworkEffect
 import net.minestom.server.item.firework.FireworkEffectType
 import net.minestom.server.item.metadata.LeatherArmorMeta
 import net.minestom.server.network.packet.server.play.EffectPacket
+import net.minestom.server.network.packet.server.play.ExplosionPacket
 import net.minestom.server.network.packet.server.play.TeamsPacket
 import net.minestom.server.scoreboard.Sidebar
 import net.minestom.server.sound.SoundEvent
 import net.minestom.server.tag.Tag
 import net.minestom.server.timer.TaskSchedule
 import net.minestom.server.utils.Direction
-import net.minestom.server.utils.NamespaceID
 import world.cepi.kstom.Manager
 import world.cepi.kstom.event.listenOnly
 import world.cepi.kstom.util.asPos
-import world.cepi.kstom.util.asVec
 import world.cepi.kstom.util.playSound
 import world.cepi.kstom.util.roundToBlock
 import world.cepi.particle.Particle
@@ -84,10 +78,13 @@ import world.cepi.particle.data.OffsetAndSpeed
 import world.cepi.particle.renderer.shape.CircleRenderer
 import world.cepi.particle.renderer.translate
 import world.cepi.particle.showParticle
+import java.nio.file.Files
+import java.nio.file.Path
 import java.time.Duration
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ThreadLocalRandom
+import java.util.stream.Collectors
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -102,8 +99,8 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
     val spawnPos = Pos(0.5, 65.0, 0.5)
 
-    var diamondBlockTask: MinestomRunnable? = null
-    var diamondBlockPlayer: Player? = null
+    private var diamondBlockTask: MinestomRunnable? = null
+    private var diamondBlockPlayer: UUID? = null
 
     val respawnTasks = ConcurrentHashMap<UUID, MinestomRunnable>()
     val spawnProtIndicatorTasks = ConcurrentHashMap<UUID, MinestomRunnable>()
@@ -190,13 +187,18 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             .append(Component.text("5", NamedTextColor.GREEN, TextDecoration.BOLD))
             .build()
 
-        scoreboard?.createLine(
-            Sidebar.ScoreboardLine(
-                player.uuid.toString(),
-                player.displayName!!,
-                5
+        try {
+            scoreboard?.createLine(
+                Sidebar.ScoreboardLine(
+                    player.uuid.toString(),
+                    player.displayName!!,
+                    5
+                )
             )
-        )
+        } catch (e: Exception) {
+
+        }
+
 
         player.setCanPickupItem(true)
 
@@ -206,6 +208,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
     override fun playerLeave(player: Player) {
         respawnTasks[player.uuid]?.cancel()
+        respawnTasks.remove(player.uuid)
         player.cleanup()
 
         teams.firstOrNull { it.teamName == player.username }?.destroy()
@@ -281,8 +284,8 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 }
             }
 
-            if (player.inventory.itemInMainHand.material().name().endsWith("wool", ignoreCase = true)) {
-                player.inventory.itemInMainHand = ItemStack.builder(player.color.woolMaterial).amount(64).build()
+            if (player.inventory.getItemInHand(hand).material().name().endsWith("wool", ignoreCase = true)) {
+                player.inventory.setItemInHand(hand, ItemStack.builder(player.color.woolMaterial).amount(64).build())
 
                 if (isNextToBarrier(player.instance!!, blockPosition)) {
                     isCancelled = true
@@ -447,7 +450,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                     player.instance!!.getBlock(player.position.sub(0.0, 1.0, 0.0)).compare(Block.DIAMOND_BLOCK)
 
                 if (diamondBlockPlayer != null) {
-                    if (!isOnDiamondBlock && diamondBlockPlayer == player) {
+                    if (!isOnDiamondBlock && diamondBlockPlayer == player.uuid) {
                         diamondBlockTask?.cancel()
                         diamondBlockTask = null
                         diamondBlockPlayer = null
@@ -457,7 +460,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 }
 
                 if (isOnDiamondBlock) {
-                    diamondBlockPlayer = player
+                    diamondBlockPlayer = player.uuid
 
                     diamondBlockTask = object : MinestomRunnable(repeat = Duration.ofSeconds(1), iterations = diamondBlockTime, taskGroup = taskGroup) {
                         override fun run() {
@@ -466,7 +469,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                             if (seconds % 5L == 0L && seconds <= 15L && seconds != diamondBlockTime) {
                                 playSound(
                                     Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_PLING, Sound.Source.MASTER, 1f, 1f),
-                                    Sound.Emitter.self()
+                                    Emitter.self()
                                 )
 
                                 sendMessage(
@@ -487,7 +490,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                             if (seconds <= 5) {
                                 playSound(
                                     Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_PLING, Sound.Source.MASTER, 1f, 1f),
-                                    Sound.Emitter.self()
+                                    Emitter.self()
                                 )
 
                                 showTitle(
@@ -535,7 +538,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
                     currentEvent = randomEvent
 
-                    taskGroup.tasks.add(Manager.scheduler.buildTask {
+                    taskGroup.addTask(Manager.scheduler.buildTask {
                         currentEvent = null
                     }.delay(randomEvent.duration).schedule())
 
@@ -546,7 +549,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         // Border logic
         val timeToSmall = 3 * 60 * 1000L
 
-        taskGroup.tasks.add(Manager.scheduler.buildTask {
+        taskGroup.addTask(Manager.scheduler.buildTask {
             diamondBlockTime = 10L
             sendMessage(
                 Component.text()
@@ -564,10 +567,14 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             override fun run() {
                 if (!setBorder) {
                     setBorder = true
-                    instance.worldBorder.setCenter(0.5f, 0.5f)
-                    instance.worldBorder.setDiameter(originalBorderSize)
-                    instance.worldBorder.warningBlocks = 5
-                    instance.worldBorder.setDiameter(7.0, timeToSmall)
+
+                    instance.ifPresent { instance ->
+                        instance.worldBorder.setCenter(0.5f, 0.5f)
+                        instance.worldBorder.diameter = originalBorderSize
+                        instance.worldBorder.warningBlocks = 5
+                        instance.worldBorder.setDiameter(7.0, timeToSmall)
+                    }
+
                     startTimestamp = System.currentTimeMillis()
 
                     diamondBlockTime = 15L
@@ -589,7 +596,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                     )
                 }
 
-                borderSize = dev.emortal.immortal.util.lerp(7f, originalBorderSize.toFloat(), 1-((System.currentTimeMillis() - startTimestamp).toFloat() / timeToSmall.toFloat())).toDouble()
+                borderSize = lerp(7f, originalBorderSize.toFloat(), 1-((System.currentTimeMillis() - startTimestamp).toFloat() / timeToSmall.toFloat())).toDouble()
             }
         }
 
@@ -811,7 +818,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
         player.playSound(
             Sound.sound(SoundEvent.BLOCK_BEACON_ACTIVATE, Sound.Source.MASTER, 1f, 2f),
-            Sound.Emitter.self()
+            Emitter.self()
         )
 
         if (gameState == GameState.ENDING) return
@@ -877,6 +884,8 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
     override fun gameDestroyed() {
         diamondBlockTask?.cancel()
+        respawnTasks.clear()
+        spawnProtIndicatorTasks
 
         players.forEach {
             it.removeTag(loadoutNotificationTag)
@@ -894,7 +903,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
         pos = pos.withDirection(angle1).withPitch(0f)
 
-        val block = instance.getBlock(pos)
+        val block = instance.getBlock(pos)!!
         if (block.isAir || block.name().endsWith("wool", true)) {
             instance.setBlock(pos.add(0.0, 1.0, 0.0), Block.AIR)
             instance.setBlock(pos.add(0.0, 2.0, 0.0), Block.AIR)
@@ -908,7 +917,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         return pos.add(0.0, 1.0, 0.0)
     }
 
-    fun isNextToBarrier(instance: Instance, pos: Point): Boolean {
+    private fun isNextToBarrier(instance: Instance, pos: Point): Boolean {
         for (direction in Direction.values()) {
             if (instance.getBlock(
                     pos.add(
@@ -926,26 +935,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     }
 
     fun explode(position: Point, explosionSize: Int, explosionForce: Double, explosionForceDistance: Double, breakBlocks: Boolean = true, entity: Entity? = null) {
-        instance.showParticle(
-            Particle.particle(
-                type = ParticleType.EXPLOSION_EMITTER,
-                count = 1,
-                data = OffsetAndSpeed(0f, 0f, 0f, 0f),
-            ),
-            position.asVec()
-        )
-        instance.showParticle(
-            Particle.particle(
-                type = ParticleType.LARGE_SMOKE,
-                count = 20,
-                data = OffsetAndSpeed(0f, 0f, 0f, 0.1f),
-            ),
-            position.asVec()
-        )
-        playSound(
-            Sound.sound(SoundEvent.ENTITY_GENERIC_EXPLODE, Sound.Source.BLOCK, 2f, 1f),
-            position
-        )
+
 
         players
             .filter { it.gameMode == GameMode.SURVIVAL && !it.hasSpawnProtection }
@@ -962,18 +952,22 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                     .mul(explosionForce)
             }
 
+        instance.get()?.sendGroupedPacket(ExplosionPacket(position.x().toFloat(), position.y().toFloat(), position.z().toFloat(), explosionSize.toFloat(), ByteArray(0), 0f, 0f, 0f))
+
         if (breakBlocks) {
             val batch = AbsoluteBlockBatch()
             val sphereBlocks = SphereUtil.getBlocksInSphere(explosionSize)
 
             sphereBlocks.forEach {
                 val blockPos = position.add(it.x(), it.y(), it.z())
-                val block = instance.getBlock(blockPos)
+                val block = instance.getBlock(blockPos)!!
 
                 if (!block.name().contains("WOOL", true)) return@forEach
 
                 batch.setBlock(blockPos, Block.AIR)
             }
+
+
 
             batch.apply(instance) {}
         }
@@ -1044,9 +1038,12 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     }
 
     override fun instanceCreate(): Instance {
-        val dimension = Manager.dimensionType.getDimension(NamespaceID.from("fullbright"))!!
-        val instance = Manager.instance.createInstanceContainer(dimension)
-        instance.chunkLoader = AnvilLoader("forest")
+        //val dimension = Manager.dimensionType.getDimension(NamespaceID.from("fullbright"))!!
+        val instance = Manager.instance.createInstanceContainer()
+
+        val randomWorld = Files.list(Path.of("./maps/")).collect(Collectors.toSet()).random()
+
+        instance.chunkLoader = AnvilLoader(randomWorld)
 
         return instance
     }

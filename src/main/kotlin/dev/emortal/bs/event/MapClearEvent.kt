@@ -2,6 +2,7 @@ package dev.emortal.bs.event
 
 import dev.emortal.bs.game.BlockSumoGame
 import dev.emortal.immortal.util.MinestomRunnable
+import dev.emortal.immortal.util.apply
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor

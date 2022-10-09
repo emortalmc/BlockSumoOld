@@ -85,7 +85,7 @@ object Fireball : Powerup(
     }
 
     override fun collide(game: BlockSumoGame, entity: Entity) {
-        game.explode(entity.position, 3, 40.0, 6.0, true, entity)
+        game.explode(entity.position, 3, 35.0, 5.5, true, entity)
 
         entity.remove()
     }

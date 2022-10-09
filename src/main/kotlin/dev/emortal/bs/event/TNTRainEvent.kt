@@ -4,6 +4,7 @@ import dev.emortal.bs.game.BlockSumoGame
 import dev.emortal.bs.item.Item
 import dev.emortal.bs.item.TNT
 import dev.emortal.immortal.util.MinestomRunnable
+import dev.emortal.immortal.util.setInstance
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
@@ -30,8 +31,6 @@ class TNTRainEvent : Event() {
         .build()
     override val duration: Duration = Duration.ofSeconds(10)
 
-    val tntPerSecond = 10
-
     override fun eventStarted(game: BlockSumoGame) {
 
         game.playSound(
@@ -43,7 +42,7 @@ class TNTRainEvent : Event() {
             )
         )
 
-        object : MinestomRunnable(repeat = Duration.ofMillis(2000), taskGroup = game.taskGroup, iterations = 5L) {
+        object : MinestomRunnable(repeat = Duration.ofMillis(2100), taskGroup = game.taskGroup, iterations = 4L) {
             override fun run() {
                 game.players
                     .filter { it.gameMode == GameMode.SURVIVAL }
@@ -58,8 +57,8 @@ class TNTRainEvent : Event() {
 
                         game.playSound(Sound.sound(SoundEvent.ENTITY_TNT_PRIMED, Sound.Source.BLOCK, 2f, 1f), tntEntity.position)
 
-                        game.taskGroup.tasks.add(Manager.scheduler.buildTask {
-                            game.explode(tntEntity.position, 3, 40.0, 6.0, true, tntEntity)
+                        game.taskGroup.addTask(Manager.scheduler.buildTask {
+                            game.explode(tntEntity.position, 3, 33.0, 5.0, true, tntEntity)
 
                             tntEntity.remove()
                         }.delay(TaskSchedule.tick(tntMeta.fuseTime)).schedule())

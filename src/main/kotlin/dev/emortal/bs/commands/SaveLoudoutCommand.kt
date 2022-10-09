@@ -12,7 +12,7 @@ import net.minestom.server.sound.SoundEvent
 import world.cepi.kstom.command.kommand.Kommand
 
 object SaveLoudoutCommand : Kommand({
-    onlyPlayers
+    onlyPlayers()
 
     default {
         if (player.game == null) {

@@ -32,7 +32,7 @@ sealed class Event {
 
         game.sendMessage(Component.text().append(prefix).append(startMessage))
 
-        game.taskGroup.tasks.add(Manager.scheduler.buildTask {
+        game.taskGroup.addTask(Manager.scheduler.buildTask {
             eventEnded(game)
         }.delay(duration).schedule())
 

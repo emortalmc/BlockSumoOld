@@ -48,7 +48,7 @@ class BlockSumoExtension : Extension() {
             canSpectate = true,
             WhenToRegisterEvents.GAME_START,
             GameOptions(
-                maxPlayers = 16,
+                maxPlayers = 30,
                 minPlayers = 2,
                 10,
             )

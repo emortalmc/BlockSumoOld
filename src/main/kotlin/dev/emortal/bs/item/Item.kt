@@ -1,7 +1,6 @@
 package dev.emortal.bs.item
 
 import net.kyori.adventure.text.format.TextDecoration
-import net.minestom.server.entity.Player
 import net.minestom.server.item.ItemMeta
 import net.minestom.server.item.ItemStack
 import net.minestom.server.item.Material
@@ -16,11 +15,6 @@ sealed class Item(
 ) {
 
     companion object {
-
-        val Player.heldItem: Item?
-            get() = itemInMainHand.getItem
-        val ItemStack.getItem: Item?
-            get() = registeredMap[getTag(itemIdTag)]
 
         val itemIdTag = Tag.String("itemId")
 

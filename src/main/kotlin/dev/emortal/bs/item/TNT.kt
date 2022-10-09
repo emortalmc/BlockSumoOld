@@ -50,8 +50,8 @@ object TNT : Powerup(
 
         game.playSound(Sound.sound(SoundEvent.ENTITY_TNT_PRIMED, Sound.Source.BLOCK, 2f, 1f), pos)
 
-        game.taskGroup.tasks.add(Manager.scheduler.buildTask {
-            game.explode(tntEntity.position, 3, 40.0, 6.0, true, tntEntity)
+        game.taskGroup.addTask(Manager.scheduler.buildTask {
+            game.explode(tntEntity.position, 3, 35.0, 5.5, true, tntEntity)
 
             tntEntity.remove()
         }.delay(TaskSchedule.tick(tntMeta.fuseTime)).schedule())

@@ -1,6 +1,7 @@
 package dev.emortal.bs.util
 
 import dev.emortal.bs.game.BlockSumoGame
+import dev.emortal.immortal.util.getBlock
 import dev.emortal.rayfast.area.area3d.Area3d
 import dev.emortal.rayfast.area.area3d.Area3dRectangularPrism
 import dev.emortal.rayfast.casting.grid.GridCast
@@ -55,7 +56,7 @@ object RaycastUtil {
             try {
                 val hitBlock = game.instance.getBlock(pos)
 
-                if (hitBlock.isSolid) {
+                if (hitBlock?.isSolid == true) {
                     return pos
                 }
             } catch (e: NullPointerException) {
@@ -75,10 +76,10 @@ object RaycastUtil {
         hitFilter: (Entity) -> Boolean = { true }
     ): Pair<Entity, Pos>? {
 
-        game.instance.entities
-            .filter { hitFilter.invoke(it) }
-            .filter { it.position.distanceSquared(startPoint) <= maxDistance * maxDistance }
-            .forEach {
+        game.instance.get()?.entities
+            ?.filter { hitFilter.invoke(it) }
+            ?.filter { it.position.distanceSquared(startPoint) <= maxDistance * maxDistance }
+            ?.forEach {
                 val area = it.area3d
                 val pos = it.position
 
