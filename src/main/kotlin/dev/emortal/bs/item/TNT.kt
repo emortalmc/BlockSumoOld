@@ -35,26 +35,7 @@ object TNT : Powerup(
 
         removeOne(player, hand)
 
-        val tntEntity = Entity(EntityType.TNT)
-        val tntMeta = tntEntity.entityMeta as PrimedTntMeta
-        //tntEntity.velocity = Vec(0.0, 10.0, 0.0)
-        tntMeta.fuseTime = 60
-        tntEntity.setBoundingBox(0.98, 0.98, 0.98)
-
-        tntEntity.setTag(itemIdTag, id)
-        tntEntity.setTag(entityShooterTag, player.username)
-
-        val instance = player.instance!!
-
-        tntEntity.setInstance(instance, pos)
-
-        game.playSound(Sound.sound(SoundEvent.ENTITY_TNT_PRIMED, Sound.Source.BLOCK, 2f, 1f), pos)
-
-        game.taskGroup.addTask(Manager.scheduler.buildTask {
-            game.explode(tntEntity.position, 3, 35.0, 5.5, true, tntEntity)
-
-            tntEntity.remove()
-        }.delay(TaskSchedule.tick(tntMeta.fuseTime)).schedule())
+        game.spawnTnt(pos, 60)
     }
 
 }

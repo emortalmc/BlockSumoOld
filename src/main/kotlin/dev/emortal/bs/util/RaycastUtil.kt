@@ -1,7 +1,6 @@
 package dev.emortal.bs.util
 
 import dev.emortal.bs.game.BlockSumoGame
-import dev.emortal.immortal.util.getBlock
 import dev.emortal.rayfast.area.area3d.Area3d
 import dev.emortal.rayfast.area.area3d.Area3dRectangularPrism
 import dev.emortal.rayfast.casting.grid.GridCast
@@ -11,6 +10,7 @@ import net.minestom.server.coordinate.Point
 import net.minestom.server.coordinate.Pos
 import net.minestom.server.coordinate.Vec
 import net.minestom.server.entity.Entity
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Class to make Rayfast easier to use with Minestom
@@ -19,8 +19,7 @@ import net.minestom.server.entity.Entity
  */
 object RaycastUtil {
 
-    private val boundingBoxToArea3dMap = HashMap<BoundingBox, Area3d>()
-
+    private val boundingBoxToArea3dMap = ConcurrentHashMap<BoundingBox, Area3d>()
 
     init {
         Area3d.CONVERTER.register(BoundingBox::class.java) { box ->
@@ -56,7 +55,7 @@ object RaycastUtil {
             try {
                 val hitBlock = game.instance.getBlock(pos)
 
-                if (hitBlock?.isSolid == true) {
+                if (hitBlock.isSolid) {
                     return pos
                 }
             } catch (e: NullPointerException) {
@@ -76,10 +75,10 @@ object RaycastUtil {
         hitFilter: (Entity) -> Boolean = { true }
     ): Pair<Entity, Pos>? {
 
-        game.instance.get()?.entities
-            ?.filter { hitFilter.invoke(it) }
-            ?.filter { it.position.distanceSquared(startPoint) <= maxDistance * maxDistance }
-            ?.forEach {
+        game.instance.entities
+            .filter { hitFilter.invoke(it) }
+            .filter { it.position.distanceSquared(startPoint) <= maxDistance * maxDistance }
+            .forEach {
                 val area = it.area3d
                 val pos = it.position
 
@@ -113,18 +112,18 @@ object RaycastUtil {
             return RaycastResult(RaycastResultType.HIT_NOTHING, null, null)
         }
 
-        if (entityRaycast == null && blockRaycast != null) {
+        if (entityRaycast == null) {
             return RaycastResult(RaycastResultType.HIT_BLOCK, null, blockRaycast)
         }
 
-        if (entityRaycast != null && blockRaycast == null) {
+        if (blockRaycast == null) {
             return RaycastResult(RaycastResultType.HIT_ENTITY, entityRaycast.first, entityRaycast.second)
         }
 
         // Both entity and block check have collided, time to see which is closer!
 
-        val distanceFromEntity = startPoint.distanceSquared(entityRaycast!!.second)
-        val distanceFromBlock = startPoint.distanceSquared(blockRaycast!!)
+        val distanceFromEntity = startPoint.distanceSquared(entityRaycast.second)
+        val distanceFromBlock = startPoint.distanceSquared(blockRaycast)
 
         return if (distanceFromBlock > distanceFromEntity) {
             RaycastResult(RaycastResultType.HIT_ENTITY, entityRaycast.first, entityRaycast.second)

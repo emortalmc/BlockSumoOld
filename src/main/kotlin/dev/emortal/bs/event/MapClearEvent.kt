@@ -33,15 +33,15 @@ class MapClearEvent : Event() {
             )
         )
 
-        object : MinestomRunnable(repeat = TaskSchedule.tick(3), taskGroup = game.taskGroup, iterations = 80L-63L) {
+        object : MinestomRunnable(repeat = Duration.ofMillis(150), iterations = 80-63) {
             override fun run() {
                 val batch = AbsoluteBlockBatch()
                 val size = 19
                 for (x in -size..size) {
                     for (z in -size..size) {
-                        batch.setBlock(x, (81L - currentIteration).toInt(), z, Block.AIR)
-                        batch.setBlock(x, (82L - currentIteration).toInt(), z, Block.AIR)
-                        batch.setBlock(x, (83L - currentIteration).toInt(), z, Block.AIR)
+                        batch.setBlock(x, (81L - currentIteration.get()).toInt(), z, Block.AIR)
+                        batch.setBlock(x, (82L - currentIteration.get()).toInt(), z, Block.AIR)
+                        batch.setBlock(x, (83L - currentIteration.get()).toInt(), z, Block.AIR)
                     }
                 }
                 batch.apply(game.instance) {}

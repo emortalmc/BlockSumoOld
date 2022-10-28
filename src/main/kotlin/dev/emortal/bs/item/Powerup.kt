@@ -67,7 +67,6 @@ sealed class Powerup(
                 it.setTag(itemIdTag, id)
                 it.lore(rarity.component.decoration(TextDecoration.ITALIC, false))
                 itemCreate.invoke(it)
-                it
             }.build()
     }
 

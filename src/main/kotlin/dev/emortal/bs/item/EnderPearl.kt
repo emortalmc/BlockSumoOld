@@ -41,8 +41,7 @@ object EnderPearl : Powerup(
 
         pearl.scheduleRemove(Duration.ofSeconds(10))
 
-
-        val task = object : MinestomRunnable(taskGroup = game.taskGroup, repeat = TaskSchedule.nextTick()) {
+        object : MinestomRunnable(repeat = Duration.ofMillis(50)) {
             var lastPos: Pos? = null
             override fun run() {
                 if (pearl.velocity.x() == 0.0 || pearl.velocity.y() == 0.0 || pearl.velocity.z() == 0.0) {
@@ -65,8 +64,6 @@ object EnderPearl : Powerup(
                 lastPos = pearl.position
             }
         }
-
-        BlockSumoExtension.taskMap[pearl] = task
 
         val instance = player.instance!!
 

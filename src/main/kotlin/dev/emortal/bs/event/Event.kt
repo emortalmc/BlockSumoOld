@@ -1,6 +1,7 @@
 package dev.emortal.bs.event
 
 import dev.emortal.bs.game.BlockSumoGame
+import dev.emortal.immortal.util.MinestomRunnable
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
@@ -32,9 +33,11 @@ sealed class Event {
 
         game.sendMessage(Component.text().append(prefix).append(startMessage))
 
-        game.taskGroup.addTask(Manager.scheduler.buildTask {
-            eventEnded(game)
-        }.delay(duration).schedule())
+        game.eventTasks.add(object : MinestomRunnable(delay = duration) {
+            override fun run() {
+                eventEnded(game)
+            }
+        })
 
     }
 

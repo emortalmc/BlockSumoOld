@@ -46,7 +46,6 @@ sealed class Item(
             it.lore(rarity.component.decoration(TextDecoration.ITALIC, false))
             itemCreate.invoke(it)
             it.setTag(itemIdTag, id)
-            it
         }.build()
     }
 

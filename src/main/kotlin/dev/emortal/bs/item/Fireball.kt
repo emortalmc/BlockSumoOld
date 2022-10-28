@@ -18,6 +18,7 @@ import world.cepi.particle.Particle
 import world.cepi.particle.ParticleType
 import world.cepi.particle.data.OffsetAndSpeed
 import world.cepi.particle.showParticle
+import java.time.Duration
 
 object Fireball : Powerup(
     "<gold>Fireball".asMini(),
@@ -27,9 +28,6 @@ object Fireball : Powerup(
     PowerupInteractType.USE,
     SpawnType.EVERYWHERE
 ) {
-
-    val sphere = SphereUtil.getBlocksInSphere(3)
-    val entityTaskMap = hashMapOf<Entity, Task>()
 
     override fun use(game: BlockSumoGame, player: Player, hand: Player.Hand, pos: Pos?, entity: Entity?) {
         removeOne(player, hand)
@@ -51,7 +49,7 @@ object Fireball : Powerup(
             player.position
         )
 
-        val task = object : MinestomRunnable(taskGroup = game.taskGroup, repeat = TaskSchedule.nextTick(), iterations = 10L*20L) {
+        object : MinestomRunnable(repeat = Duration.ofMillis(50), iterations = 10*20) {
             override fun run() {
                 if (fireBall.velocity.x() == 0.0 || fireBall.velocity.y() == 0.0 || fireBall.velocity.z() == 0.0) {
                     collide(game, fireBall)

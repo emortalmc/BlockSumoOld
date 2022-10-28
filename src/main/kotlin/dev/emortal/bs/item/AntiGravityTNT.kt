@@ -15,6 +15,7 @@ import net.minestom.server.item.Material
 import net.minestom.server.sound.SoundEvent
 import net.minestom.server.timer.TaskSchedule
 import world.cepi.kstom.util.playSound
+import java.time.Duration
 
 object AntiGravityTNT : Powerup(
     Component.text("Anti-Gravity TNT", NamedTextColor.AQUA),
@@ -32,38 +33,18 @@ object AntiGravityTNT : Powerup(
 
         removeOne(player, hand)
 
-        val tntEntity = Entity(EntityType.TNT)
-        val tntMeta = tntEntity.entityMeta as PrimedTntMeta
-        //tntEntity.velocity = Vec(0.0, 10.0, 0.0)
-        tntEntity.setBoundingBox(0.98, 0.98, 0.98)
+        val tntEntity = game.spawnTnt(pos.sub(0.0, 0.4, 0.0), 60)
         tntEntity.setNoGravity(true)
-        tntEntity.velocity = Vec(0.0, 7.0, 0.0)
-        tntMeta.fuseTime = 60
-
-        tntEntity.setTag(itemIdTag, id)
-        tntEntity.setTag(entityShooterTag, player.username)
-
-        val instance = player.instance!!
-
-        tntEntity.setInstance(instance, pos.sub(0.0, 0.4, 0.0))
 
         game.playSound(Sound.sound(SoundEvent.ENTITY_TNT_PRIMED, Sound.Source.BLOCK, 2f, 1f), pos)
 
-        object : MinestomRunnable(taskGroup = game.taskGroup, repeat = TaskSchedule.nextTick(), iterations = tntMeta.fuseTime.toLong()) {
-            override fun run() {
-                if (tntEntity.position.y > 80) {
-                    tntEntity.velocity = Vec.ZERO
-                } else {
-                    tntEntity.velocity = Vec(0.0, 7.0, 0.0)
-                }
+        tntEntity.scheduler().buildTask {
+            if (tntEntity.position.y > 80) {
+                tntEntity.velocity = Vec.ZERO
+            } else {
+                tntEntity.velocity = Vec(0.0, 7.0, 0.0)
             }
-
-            override fun cancelled() {
-                game.explode(tntEntity.position, 3, 35.0, 5.5, true, tntEntity)
-
-                tntEntity.remove()
-            }
-        }
+        }.repeat(TaskSchedule.nextTick()).schedule()
     }
 
 }

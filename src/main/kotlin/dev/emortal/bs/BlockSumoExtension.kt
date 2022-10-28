@@ -23,8 +23,6 @@ import java.util.concurrent.ConcurrentHashMap
 class BlockSumoExtension : Extension() {
 
     companion object {
-        val taskMap = ConcurrentHashMap<Entity, MinestomRunnable>()
-
         var databaseConfig = DatabaseConfig()
         val databaseConfigPath = Path.of("./blocksumo.json")
 
@@ -48,9 +46,9 @@ class BlockSumoExtension : Extension() {
             canSpectate = true,
             WhenToRegisterEvents.GAME_START,
             GameOptions(
-                maxPlayers = 30,
+                maxPlayers = 15,
                 minPlayers = 2,
-                10,
+                15,
             )
         )
 

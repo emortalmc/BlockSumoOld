@@ -14,8 +14,8 @@ repositories {
 }
 
 dependencies {
-    compileOnly("com.github.Minestom:Minestom:17ef1c2f57")
-    compileOnly("com.github.EmortalMC:Immortal:1174fefda5")
+    compileOnly("com.github.Minestom:Minestom:e11d15af0d")
+    compileOnly("com.github.EmortalMC:Immortal:93705419d1")
 
     compileOnly("org.litote.kmongo:kmongo-coroutine-serialization:4.7.1")
     compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.4.0")
