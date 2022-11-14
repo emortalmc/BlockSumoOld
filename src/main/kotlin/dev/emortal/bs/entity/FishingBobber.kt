@@ -37,11 +37,6 @@ class FishingBobber(val shooter: Player, val game: BlockSumoGame) : Entity(Entit
             field = value
         }
 
-    companion object {
-        val bobbers = ConcurrentHashMap<UUID, FishingBobber>()
-        val hookedPlayer = ConcurrentHashMap<UUID, Player>()
-    }
-
     init {
         ownerEntity = shooter
     }
@@ -55,7 +50,7 @@ class FishingBobber(val shooter: Player, val game: BlockSumoGame) : Entity(Entit
             remove()
             ownerEntity = null
             hookedEntity = null
-            bobbers.remove(shooter.uuid)
+            game.bobbers.remove(shooter.uuid)
             return
         }
 
@@ -67,7 +62,7 @@ class FishingBobber(val shooter: Player, val game: BlockSumoGame) : Entity(Entit
 
         if (hitPlayer != null && hookedEntity == null) {
             hookedEntity = hitPlayer
-            hookedPlayer[shooter.uuid] = hitPlayer
+            game.hookedPlayer[shooter.uuid] = hitPlayer
             if (hitPlayer.canBeHit && !hitPlayer.hasSpawnProtection)  {
                 hitPlayer.damage(DamageType.fromPlayer(shooter), 0f)
             }
@@ -77,22 +72,22 @@ class FishingBobber(val shooter: Player, val game: BlockSumoGame) : Entity(Entit
 
     fun retract(hand: Hand) {
         val powerup = shooter.getHeldPowerup(hand)
-        powerup?.use(game, shooter, hand, getPosition(), hookedPlayer[shooter.uuid])
+        powerup?.use(game, shooter, hand, getPosition(), game.hookedPlayer[shooter.uuid])
 
         remove()
         ownerEntity = null
         hookedEntity = null
-        hookedPlayer.remove(shooter.uuid)
-        bobbers.remove(shooter.uuid)
+        game.hookedPlayer.remove(shooter.uuid)
+        game.bobbers.remove(shooter.uuid)
     }
 
     fun throwBobber(hand: Hand) {
-        if (bobbers.containsKey(shooter.uuid)) {
+        if (game.bobbers.containsKey(shooter.uuid)) {
             retract(hand)
             return
         }
-        bobbers[shooter.uuid]?.retract(hand)
-        bobbers[shooter.uuid] = this
+        game.bobbers[shooter.uuid]?.retract(hand)
+        game.bobbers[shooter.uuid] = this
 
         val playerPos = shooter.position
         val playerPitch = playerPos.pitch

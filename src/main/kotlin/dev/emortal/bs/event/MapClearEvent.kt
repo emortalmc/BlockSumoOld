@@ -33,22 +33,30 @@ class MapClearEvent : Event() {
             )
         )
 
-        object : MinestomRunnable(repeat = Duration.ofMillis(150), iterations = 80-63) {
-            override fun run() {
-                val batch = AbsoluteBlockBatch()
-                val size = 19
-                for (x in -size..size) {
-                    for (z in -size..size) {
-                        batch.setBlock(x, (81L - currentIteration.get()).toInt(), z, Block.AIR)
-                        batch.setBlock(x, (82L - currentIteration.get()).toInt(), z, Block.AIR)
-                        batch.setBlock(x, (83L - currentIteration.get()).toInt(), z, Block.AIR)
-                    }
-                }
-                batch.apply(game.instance) {}
-                game.playSound(
-                    Sound.sound(SoundEvent.ENTITY_EGG_THROW, Sound.Source.BLOCK, 1f, 0.5f)
-                )
+        val iterations = 80-63
+        var currentIteration = 0
+        game.instance?.scheduler()?.submitTask {
+            if (currentIteration >= iterations) {
+                return@submitTask TaskSchedule.stop()
             }
+
+            val batch = AbsoluteBlockBatch()
+            val size = 19
+            for (x in -size..size) {
+                for (z in -size..size) {
+                    batch.setBlock(x, (81L - currentIteration).toInt(), z, Block.AIR)
+                    batch.setBlock(x, (82L - currentIteration).toInt(), z, Block.AIR)
+                    batch.setBlock(x, (83L - currentIteration).toInt(), z, Block.AIR)
+                }
+            }
+            batch.apply(game.instance!!) {}
+            game.playSound(
+                Sound.sound(SoundEvent.ENTITY_EGG_THROW, Sound.Source.BLOCK, 1f, 0.5f)
+            )
+
+            currentIteration++
+
+            TaskSchedule.millis(150)
         }
     }
 

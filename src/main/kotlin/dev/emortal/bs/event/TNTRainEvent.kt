@@ -40,14 +40,21 @@ class TNTRainEvent : Event() {
             )
         )
 
-        object : MinestomRunnable(repeat = Duration.ofMillis(2100), iterations = 4) {
-            override fun run() {
-                game.players
-                    .filter { it.gameMode == GameMode.SURVIVAL }
-                    .forEach {
-                        game.spawnTnt(it.position.add(0.0, 10.0, 0.0))
-                    }
+        var currentIteration = 0
+        game.instance?.scheduler()?.submitTask {
+            if (currentIteration >= 4) {
+                return@submitTask TaskSchedule.stop()
             }
+
+            game.players
+                .filter { it.gameMode == GameMode.SURVIVAL }
+                .forEach {
+                    game.spawnTnt(it.position.add(0.0, 10.0, 0.0), 80, 3, 33.0, 5.0)
+                }
+
+            currentIteration++
+
+            TaskSchedule.seconds(2)
         }
     }
 

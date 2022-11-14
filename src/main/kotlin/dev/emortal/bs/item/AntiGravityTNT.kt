@@ -33,7 +33,7 @@ object AntiGravityTNT : Powerup(
 
         removeOne(player, hand)
 
-        val tntEntity = game.spawnTnt(pos.sub(0.0, 0.4, 0.0), 60)
+        val tntEntity = game.spawnTnt(pos.sub(0.0, 0.4, 0.0), 60, 3, 35.0,  5.5)
         tntEntity.setNoGravity(true)
 
         game.playSound(Sound.sound(SoundEvent.ENTITY_TNT_PRIMED, Sound.Source.BLOCK, 2f, 1f), pos)

@@ -12,11 +12,11 @@ object BlockSumoPlayerHelper {
         get() = getTag(finalKillsTag) ?: 0
         set(value) = setTag(finalKillsTag, value)
     var Player.lives: Int
-        get() = getTag(livesTag) ?: 5
+        get() = getTag(livesTag) ?: 0
         set(value) = setTag(livesTag, value)
 
     var Player.color: TeamColor
-        get() = TeamColor.values()[getTag(colorTag)!!]
+        get() = TeamColor.values()[getTag(colorTag) ?: 0]
         set(value) = setTag(colorTag, value.ordinal)
 
     var Player.canBeHit: Boolean

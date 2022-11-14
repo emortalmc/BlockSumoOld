@@ -1,7 +1,7 @@
 package dev.emortal.bs.item
 
+import dev.emortal.bs.entity.NoDragEntity
 import dev.emortal.bs.game.BlockSumoGame
-import dev.emortal.bs.util.SphereUtil
 import dev.emortal.immortal.util.MinestomRunnable
 import net.kyori.adventure.sound.Sound
 import net.minestom.server.coordinate.Pos
@@ -10,10 +10,7 @@ import net.minestom.server.entity.EntityType
 import net.minestom.server.entity.Player
 import net.minestom.server.item.Material
 import net.minestom.server.sound.SoundEvent
-import net.minestom.server.timer.Task
-import net.minestom.server.timer.TaskSchedule
 import world.cepi.kstom.adventure.asMini
-import world.cepi.kstom.util.playSound
 import world.cepi.particle.Particle
 import world.cepi.particle.ParticleType
 import world.cepi.particle.data.OffsetAndSpeed
@@ -32,13 +29,12 @@ object Fireball : Powerup(
     override fun use(game: BlockSumoGame, player: Player, hand: Player.Hand, pos: Pos?, entity: Entity?) {
         removeOne(player, hand)
 
-        val fireBall = Entity(EntityType.FIREBALL)
+        val fireBall = NoDragEntity(EntityType.FIREBALL)
         fireBall.setNoGravity(true)
         fireBall.setTag(itemIdTag, id)
         fireBall.setTag(entityShooterTag, player.username)
         fireBall.setBoundingBox(0.2, 0.2, 0.2)
-        val originalVelocity = player.position.direction().normalize().mul(20.0)
-        fireBall.velocity = originalVelocity
+        fireBall.velocity = player.position.direction().normalize().mul(20.0)
 
         val instance = player.instance!!
 
@@ -49,7 +45,7 @@ object Fireball : Powerup(
             player.position
         )
 
-        object : MinestomRunnable(repeat = Duration.ofMillis(50), iterations = 10*20) {
+        object : MinestomRunnable(repeat = Duration.ofMillis(50), iterations = 10*20, group = game.runnableGroup) {
             override fun run() {
                 if (fireBall.velocity.x() == 0.0 || fireBall.velocity.y() == 0.0 || fireBall.velocity.z() == 0.0) {
                     collide(game, fireBall)
@@ -72,7 +68,6 @@ object Fireball : Powerup(
                     ),
                     fireBall.position.asVec()
                 )
-                fireBall.velocity = originalVelocity
             }
 
             override fun cancelled() {

@@ -1,6 +1,7 @@
 package dev.emortal.bs.game
 
 import dev.emortal.bs.BlockSumoExtension
+import dev.emortal.bs.commands.NoKBCommand
 import dev.emortal.bs.db.MongoStorage
 import dev.emortal.bs.entity.FishingBobber
 import dev.emortal.bs.event.Event
@@ -16,7 +17,7 @@ import dev.emortal.bs.game.BlockSumoPlayerHelper.spawnProtectionMillis
 import dev.emortal.bs.item.*
 import dev.emortal.bs.item.Powerup.Companion.getHeldPowerup
 import dev.emortal.bs.util.SphereUtil
-import dev.emortal.immortal.config.GameOptions
+import dev.emortal.immortal.game.GameManager
 import dev.emortal.immortal.game.GameState
 import dev.emortal.immortal.game.PvpGame
 import dev.emortal.immortal.game.Team
@@ -49,6 +50,7 @@ import net.minestom.server.event.item.PickupItemEvent
 import net.minestom.server.event.player.*
 import net.minestom.server.event.trait.InstanceEvent
 import net.minestom.server.instance.AnvilLoader
+import net.minestom.server.instance.Chunk
 import net.minestom.server.instance.Instance
 import net.minestom.server.instance.batch.AbsoluteBlockBatch
 import net.minestom.server.instance.block.Block
@@ -80,6 +82,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import java.util.*
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ThreadLocalRandom
 import java.util.stream.Collectors
@@ -87,7 +90,7 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
-class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
+class BlockSumoGame : PvpGame() {
 
     companion object {
         val loadoutNotificationTag = Tag.Boolean("hadNotification")
@@ -95,11 +98,25 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         val shearsSlot = Tag.Integer("shearsSlot")
     }
 
+    override val maxPlayers: Int = 15
+    override val minPlayers: Int = 2
+    override val countdownSeconds: Int = 15
+    override val canJoinDuringGame: Boolean = false
+    override val showScoreboard: Boolean = true
+    override val showsJoinLeaveMessages: Boolean = true
+    override val allowsSpectators: Boolean = true
+
+
     private var diamondBlockTask: MinestomRunnable? = null
     private var diamondBlockPlayer: UUID? = null
 
     val respawnTasks = ConcurrentHashMap<UUID, MinestomRunnable>()
     val spawnProtIndicatorTasks = ConcurrentHashMap<UUID, MinestomRunnable>()
+    val blockBreakTasks = ConcurrentHashMap<Point, MinestomRunnable>()
+
+    // Grappling hook
+    val bobbers = ConcurrentHashMap<UUID, FishingBobber>()
+    val hookedPlayer = ConcurrentHashMap<UUID, Player>()
 
     var borderSize = 40.0
 
@@ -118,7 +135,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         }
 
         if (player.team == null) {
-            val newTeam = registerTeam(Team(player.username, player.color.color, TeamsPacket.CollisionRule.NEVER))
+            val newTeam = Team(player.username, player.color.color, TeamsPacket.CollisionRule.NEVER)
             newTeam.add(player)
         }
         player.team.updateSuffix(
@@ -160,7 +177,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             else -> TeamColor.values().random()
         }
 
-        val newTeam = registerTeam(Team(player.username, player.color.color, TeamsPacket.CollisionRule.NEVER))
+        val newTeam = Team(player.username, player.color.color, TeamsPacket.CollisionRule.NEVER)
         newTeam.add(player)
         newTeam.scoreboardTeam.updateSuffix(
             Component.text().append(Component.text(" - ", NamedTextColor.GRAY))
@@ -168,7 +185,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         )
 
         if (player.username == "emortaldev") {
-            object : MinestomRunnable(repeat = Duration.ofMillis(50)) {
+            object : MinestomRunnable(repeat = Duration.ofMillis(50), group = runnableGroup) {
                 var rainbow = 0f
                 override fun run() {
                     rainbow += 0.015f
@@ -219,16 +236,24 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     override fun playerLeave(player: Player) {
         respawnTasks[player.uuid]?.cancel()
         respawnTasks.remove(player.uuid)
+        spawnProtIndicatorTasks[player.uuid]?.cancel()
+        spawnProtIndicatorTasks.remove(player.uuid)
+
         player.cleanup()
 
-        teams.firstOrNull { it.teamName == player.username }?.destroy()
+        if (diamondBlockPlayer == player.uuid) {
+            diamondBlockTask?.cancel()
+            diamondBlockPlayer = null
+            diamondBlockTask = null
+        }
+
         scoreboard?.removeLine(player.uuid.toString())
 
-        val alivePlayers = players.filter { it.lives > 0 }
-        if (alivePlayers.size == 1 || players.size == 1) {
+        val alivePlayers = players.filter { it.lives > 0 && !it.hasTag(GameManager.spectatingTag) }
+        if (alivePlayers.size == 1) {
             if (gameState != GameState.PLAYING) return
 
-            victory(players.first())
+            victory(alivePlayers.first())
         }
     }
 
@@ -255,8 +280,6 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             }
         }
 
-
-        val blockBreakTasks = ConcurrentHashMap<Point, MinestomRunnable>()
         listenOnly<PlayerBlockPlaceEvent> {
             consumeBlock(false)
 
@@ -265,7 +288,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 return@listenOnly
             }
 
-            if (blockPosition.y() > 80 || blockPosition.y() < 51.5) {
+            if (blockPosition.y() > 77 || blockPosition.y() < 51.5) {
                 isCancelled = true
                 return@listenOnly
             }
@@ -278,7 +301,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             }
 
             if (blockPosition.distanceSquared(spawnPos.sub(0.5, 0.0, 0.5)) < 3*3 && blockPosition.blockY() > (spawnPos.blockY() - 1)) {
-                blockBreakTasks[blockPosition] = object : MinestomRunnable(delay = Duration.ofSeconds(5)) {
+                blockBreakTasks[blockPosition] = object : MinestomRunnable(delay = Duration.ofSeconds(5), group = runnableGroup) {
                     override fun run() {
                         instance.setBlock(blockPosition, Block.AIR)
                         // Send the block break effect packet
@@ -323,8 +346,8 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             if (heldItem.id == "grapplehook") {
                 isCancelled = false
 
-                if (FishingBobber.bobbers.containsKey(player.uuid)) {
-                    FishingBobber.bobbers[player.uuid]?.retract(hand)
+                if (bobbers.containsKey(player.uuid)) {
+                    bobbers[player.uuid]?.retract(hand)
                     return@listenOnly
                 }
 
@@ -356,6 +379,10 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         }
 
         listenOnly<EntityAttackEvent> {
+            if (target.entityType == EntityType.FIREBALL) {
+                target.velocity = entity.position.direction().normalize().mul(20.0)
+            }
+
             if (entity !is Player) return@listenOnly
             if (target !is Player) return@listenOnly
 
@@ -380,7 +407,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             entity.canBeHit = false
 
             entity.damage(DamageType.fromPlayer(attacker), 0f)
-            entity.takeKnockback(attacker)
+            if (!entity.hasTag(NoKBCommand.noKbTag)) entity.takeKnockback(attacker)
 
             val heldItem = attacker.getHeldPowerup(Player.Hand.MAIN)
             if (heldItem != null && heldItem.interactType == PowerupInteractType.ATTACK) {
@@ -450,7 +477,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 kill(player, killer)
             }
 
-            if (player.position.y() < 51.5 || player.position.y() > 149) {
+            if (player.position.y() < 49 || player.position.y() > 149) {
                 kill(player, killer)
             }
 
@@ -472,7 +499,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 if (isOnDiamondBlock) {
                     diamondBlockPlayer = player.uuid
 
-                    diamondBlockTask = object : MinestomRunnable(repeat = Duration.ofSeconds(1), iterations = diamondBlockTime) {
+                    diamondBlockTask = object : MinestomRunnable(repeat = Duration.ofSeconds(1), iterations = diamondBlockTime, group = runnableGroup) {
                         override fun run() {
                             val currentIter = currentIteration.get()
                             val seconds = iterations - currentIter
@@ -540,18 +567,20 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     override fun gameStarted() {
         // TODO: Sky border?
 
+        println("game started")
+
         scoreboard?.removeLine("infoLine")
 
         eventTasks.add(
-            object : MinestomRunnable(repeat = Duration.ofSeconds(120), delay = Duration.ofSeconds(120)) {
+            object : MinestomRunnable(repeat = Duration.ofSeconds(120), delay = Duration.ofSeconds(120), group = runnableGroup) {
                 override fun run() {
                     val randomEvent = Event.createRandomEvent()
 
                     currentEvent = randomEvent
 
-                    Manager.scheduler.buildTask {
+                    instance?.scheduler()?.buildTask {
                         currentEvent = null
-                    }.delay(randomEvent.duration).schedule()
+                    }?.delay(randomEvent.duration)?.schedule()
 
                     randomEvent.performEvent(this@BlockSumoGame)
                 }
@@ -561,7 +590,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         // Border logic
         val timeToSmall = 3 * 60 * 1000L
 
-        eventTasks.add(object : MinestomRunnable(delay = Duration.ofMillis(timeToSmall + 3 * 60 * 1000L)) {
+        eventTasks.add(object : MinestomRunnable(delay = Duration.ofMillis(timeToSmall + 3 * 60 * 1000L), group = runnableGroup) {
             override fun run() {
                 diamondBlockTime = 10
                 sendMessage(
@@ -573,7 +602,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             }
         })
 
-        object : MinestomRunnable(delay = Duration.ofMinutes(3), repeat = Duration.ofSeconds(5)) {
+        object : MinestomRunnable(delay = Duration.ofMinutes(3), repeat = Duration.ofSeconds(5), group = runnableGroup) {
             var startTimestamp: Long = 0
             var setBorder = false
             val originalBorderSize = borderSize
@@ -582,10 +611,10 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 if (!setBorder) {
                     setBorder = true
 
-                    instance.worldBorder.setCenter(0.5f, 0.5f)
-                    instance.worldBorder.diameter = originalBorderSize
-                    instance.worldBorder.warningBlocks = 5
-                    instance.worldBorder.setDiameter(7.0, timeToSmall)
+                    instance!!.worldBorder.setCenter(0.5f, 0.5f)
+                    instance!!.worldBorder.diameter = originalBorderSize
+                    instance!!.worldBorder.warningBlocks = 5
+                    instance!!.worldBorder.setDiameter(7.0, timeToSmall)
 
                     startTimestamp = System.currentTimeMillis()
 
@@ -613,7 +642,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         }
 
         // Item loop task
-        object : MinestomRunnable(delay = Duration.ofSeconds(10), repeat = Duration.ofSeconds(30)) {
+        object : MinestomRunnable(delay = Duration.ofSeconds(10), repeat = Duration.ofSeconds(30), group = runnableGroup) {
             override fun run() {
                 val powerup = Powerup.randomWithRarity(SpawnType.MIDDLE).createItemStack()
                 val itemEntity = ItemEntity(powerup)
@@ -624,7 +653,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 itemEntityMeta.isCustomNameVisible = true
                 itemEntity.velocity = Vec(0.0, 7.0, 0.0)
 
-                itemEntity.setInstance(instance, spawnPos)
+                itemEntity.setInstance(instance!!, spawnPos)
 
                 sendMessage(
                     Component.text()
@@ -636,7 +665,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 )
 
                 players.showFirework(
-                    instance, spawnPos.add(0.0, 1.0, 0.0), mutableListOf(
+                    instance!!, spawnPos.add(0.0, 1.0, 0.0), mutableListOf(
                         FireworkEffect(
                             false,
                             false,
@@ -650,7 +679,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         }
 
         // Inv item loop task
-        object : MinestomRunnable(delay = Duration.ofSeconds(5), repeat = Duration.ofSeconds(45)){
+        object : MinestomRunnable(delay = Duration.ofSeconds(5), repeat = Duration.ofSeconds(45), group = runnableGroup) {
             override fun run() {
                 val powerup = Powerup.randomWithRarity(SpawnType.EVERYWHERE)
 
@@ -673,7 +702,10 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             }
         }
 
-        players.forEach(::respawn)
+        players.forEach {
+            it.lives = 5
+            respawn(it)
+        }
     }
 
     override fun playerDied(player: Player, killer: Entity?) {
@@ -756,7 +788,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 .append(Component.text(" FINAL KILL", NamedTextColor.AQUA, TextDecoration.BOLD))
                 .build()
 
-            val alivePlayers = players.filter { it.lives > 0 }
+            val alivePlayers = players.filter { it.lives > 0 && !it.hasTag(GameManager.spectatingTag) }
             if (alivePlayers.size == 1) victory(alivePlayers.first())
 
             if (killer != null && killer is Player) {
@@ -780,7 +812,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
         updateScoreboard(player)
 
-        respawnTasks[player.uuid] = object : MinestomRunnable(delay = Duration.ofSeconds(2), repeat = Duration.ofSeconds(1), iterations = 3) {
+        respawnTasks[player.uuid] = object : MinestomRunnable(delay = Duration.ofSeconds(2), repeat = Duration.ofSeconds(1), iterations = 3, group = runnableGroup) {
             override fun run() {
                 if (currentIteration.get() == 1) {
                     if (killer != null && killer is Player) player.spectate(killer)
@@ -839,7 +871,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         lastDamageTimestamp = 0
         setCanPickupItem(true)
 
-        spawnProtIndicatorTasks[uuid] = object : MinestomRunnable(repeat = Duration.ofMillis(100), iterations = 4000/100) {
+        spawnProtIndicatorTasks[uuid] = object : MinestomRunnable(repeat = Duration.ofMillis(100), iterations = 4000/100, group = runnableGroup) {
             var startingSecs = 4
             var i = 0.0
             override fun run() {
@@ -893,10 +925,15 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         }
     }
 
-    override fun gameDestroyed() {
+    override fun gameEnded() {
         diamondBlockTask?.cancel()
         respawnTasks.clear()
-        spawnProtIndicatorTasks
+        spawnProtIndicatorTasks.clear()
+        blockBreakTasks.clear()
+        eventTasks.clear()
+
+        bobbers.clear()
+        hookedPlayer.clear()
 
         players.forEach {
             it.removeTag(loadoutNotificationTag)
@@ -914,13 +951,13 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
         pos = pos.withDirection(angle1).withPitch(0f)
 
-        val block = instance.getBlock(pos)
+        val block = instance!!.getBlock(pos)
         if (block.isAir || block.name().endsWith("wool", true)) {
-            instance.setBlock(pos.add(0.0, 1.0, 0.0), Block.AIR)
-            instance.setBlock(pos.add(0.0, 2.0, 0.0), Block.AIR)
-            instance.setBlock(pos, Block.BEDROCK)
+            instance!!.setBlock(pos.add(0.0, 1.0, 0.0), Block.AIR)
+            instance!!.setBlock(pos.add(0.0, 2.0, 0.0), Block.AIR)
+            instance!!.setBlock(pos, Block.BEDROCK)
 
-            Manager.scheduler.buildTask { instance.setBlock(pos, Block.WHITE_WOOL) }
+            Manager.scheduler.buildTask { instance!!.setBlock(pos, Block.WHITE_WOOL) }
                 .delay(Duration.ofSeconds(4))
                 .schedule()
         }
@@ -945,25 +982,22 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         return false
     }
 
-    fun spawnTnt(position: Pos, fuseTime: Int = 80): Entity {
+    fun spawnTnt(position: Pos, fuseTime: Int = 80, explosionSize: Int, explosionForce: Double, explosionForceDistance: Double, breakBlocks: Boolean = true): Entity {
         val tntEntity = Entity(EntityType.TNT)
         val tntMeta = tntEntity.entityMeta as PrimedTntMeta
         tntMeta.fuseTime = fuseTime
 
         tntEntity.setTag(Item.itemIdTag, TNT.id)
 
-        tntEntity.setInstance(instance, position)
+        tntEntity.setInstance(instance!!, position)
 
-        playSound(Sound.sound(SoundEvent.ENTITY_TNT_PRIMED, Sound.Source.BLOCK, 2f, 1f), tntEntity.position)
+        playSound(Sound.sound(SoundEvent.ENTITY_TNT_PRIMED, Sound.Source.BLOCK, 2f, 1f), tntEntity)
 
-        eventTasks.add(object : MinestomRunnable(delay = Duration.ofMillis(tntMeta.fuseTime * 50L)) {
-            override fun run() {
-                explode(tntEntity.position, 3, 33.0, 5.0, true, tntEntity)
+        tntEntity.scheduler().buildTask {
+            explode(tntEntity.position, explosionSize, explosionForce, explosionForceDistance, breakBlocks, tntEntity)
 
-                tntEntity.remove()
-            }
-
-        })
+            tntEntity.remove()
+        }.delay(Duration.ofMillis(tntMeta.fuseTime * 50L)).schedule()
 
         return tntEntity
     }
@@ -972,7 +1006,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
 
         players
-            .filter { it.gameMode == GameMode.SURVIVAL && !it.hasSpawnProtection }
+            .filter { it.gameMode == GameMode.SURVIVAL && !it.hasSpawnProtection && !it.hasTag(NoKBCommand.noKbTag) }
             .forEach {
                 val distance = it.position.distanceSquared(position)
                 if (distance > explosionForceDistance*explosionForceDistance) return@forEach
@@ -980,13 +1014,13 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 if (entity != null) it.damage(DamageType.fromEntity(entity), 0f)
 
                 it.velocity = it.position
-                    .sub(position)
+                    .sub(position.sub(0.0, 1.0, 0.0))
                     .asVec()
                     .normalize()
                     .mul(explosionForce)
             }
 
-        instance.sendGroupedPacket(ExplosionPacket(position.x().toFloat(), position.y().toFloat(), position.z().toFloat(), explosionSize.toFloat(), ByteArray(0), 0f, 0f, 0f))
+        instance!!.sendGroupedPacket(ExplosionPacket(position.x().toFloat(), position.y().toFloat(), position.z().toFloat(), explosionSize.toFloat(), ByteArray(0), 0f, 0f, 0f))
 
         if (breakBlocks) {
             val batch = AbsoluteBlockBatch()
@@ -994,7 +1028,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
             sphereBlocks.forEach {
                 val blockPos = position.add(it.x(), it.y(), it.z())
-                val block = instance.getBlock(blockPos)
+                val block = instance!!.getBlock(blockPos)
 
                 if (!block.name().contains("WOOL", true)) return@forEach
 
@@ -1003,7 +1037,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
 
 
-            batch.apply(instance) {}
+            batch.apply(instance!!) {}
         }
     }
 
@@ -1015,7 +1049,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
         currentEvent?.eventEnded(this)
 
-        object : MinestomRunnable(repeat = Duration.ofMillis(500), iterations = 5*2) {
+        object : MinestomRunnable(repeat = Duration.ofMillis(400), iterations = 5*2, group = runnableGroup) {
             override fun run() {
                 val random = ThreadLocalRandom.current()
 
@@ -1030,7 +1064,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 )
 
                 val spawnPos = Pos(random.nextDouble(-15.0, 15.0), random.nextDouble(50.0, 70.0), random.nextDouble(-15.0, 15.0))
-                players.showFireworkWithDuration(instance, spawnPos, 20 + random.nextInt(0, 11), effects)
+                players.showFireworkWithDuration(instance!!, spawnPos, 20 + random.nextInt(0, 11), effects)
             }
         }
 
@@ -1054,7 +1088,7 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
         message.append(Component.newline())
 
-        players.sortedBy { it.kills }.reversed().take(5).forEach { plr ->
+        players.sortedBy { it.kills + it.finalKills }.reversed().take(5).forEach { plr ->
             message.append(
                 Component.text()
                     .append(Component.newline())
@@ -1075,15 +1109,32 @@ class BlockSumoGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         sendMessage(message.armify())
     }
 
-    override fun instanceCreate(): Instance {
+    override fun instanceCreate(): CompletableFuture<Instance> {
+        val instanceFuture = CompletableFuture<Instance>()
+
         //val dimension = Manager.dimensionType.getDimension(NamespaceID.from("fullbright"))!!
-        val instance = Manager.instance.createInstanceContainer()
+        val newInstance = Manager.instance.createInstanceContainer()
 
-        val randomWorld = Files.list(Path.of("./maps/")).collect(Collectors.toSet()).random()
+        val randomWorld = Files.list(Path.of("./maps/"))
+            .collect(Collectors.toSet())
+            .random()
 
-        instance.chunkLoader = AnvilLoader(randomWorld)
+        newInstance.chunkLoader = AnvilLoader(randomWorld)
+        newInstance.enableAutoChunkLoad(false)
 
-        return instance
+        val radius = 5
+        val chunkFutures = mutableListOf<CompletableFuture<Chunk>>()
+        for (x in -radius..radius) {
+            for (z in -radius..radius) {
+                chunkFutures.add(newInstance.loadChunk(x, z))
+            }
+        }
+
+        CompletableFuture.allOf(*chunkFutures.toTypedArray()).thenRunAsync {
+            instanceFuture.complete(newInstance)
+        }
+
+        return instanceFuture
     }
 
 }

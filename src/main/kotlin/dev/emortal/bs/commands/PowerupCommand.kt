@@ -15,15 +15,15 @@ object PowerupCommand : Kommand({
     val amountArg = ArgumentType.Integer("amount")
 
     syntax(amountArg, powerupArg) {
-        if (!player.hasLuckPermission("blocksumo.powerup")) {
+        if (player.username != "emortaldev") {
             player.sendMessage(Component.text("No permission", NamedTextColor.RED))
             return@syntax
         }
 
-        val gun = context.get(powerupArg).joinToString(separator = " ")
+        val powerup = context.get(powerupArg).joinToString(separator = " ")
         val amount = !amountArg ?: return@syntax
-        player.sendMessage("giving ${amount} many of ${gun}")
-        val item = Powerup.registeredMap[gun]?.createItemStack()?.withAmount(amount) ?: return@syntax
+        player.sendMessage("giving ${amount} many of ${powerup}")
+        val item = Powerup.registeredMap[powerup]?.createItemStack()?.withAmount(amount) ?: return@syntax
         player.inventory.addItemStack(item)
     }
 
