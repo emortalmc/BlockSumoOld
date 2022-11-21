@@ -15,7 +15,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("com.github.Minestom:Minestom:42195c536b")
+    compileOnly("com.github.Minestom:Minestom:1a013728fd")
     compileOnly("dev.emortal.immortal:Immortal:3.0.1")
 
     compileOnly("org.litote.kmongo:kmongo-coroutine-serialization:4.7.2")

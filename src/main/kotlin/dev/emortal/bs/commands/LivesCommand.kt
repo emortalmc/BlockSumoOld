@@ -1,6 +1,7 @@
 package dev.emortal.bs.commands
 
 import dev.emortal.bs.game.BlockSumoPlayerHelper
+import dev.emortal.bs.game.BlockSumoPlayerHelper.lives
 import dev.emortal.bs.item.Powerup
 import dev.emortal.immortal.luckperms.PermissionUtils.hasLuckPermission
 import net.kyori.adventure.text.Component
@@ -18,7 +19,7 @@ object LivesCommand : Kommand({
             return@syntax
         }
 
-        player.setTag(BlockSumoPlayerHelper.livesTag, context.get(amountArg))
+        player.lives = context.get(amountArg)
     }
 
 }, "lives")

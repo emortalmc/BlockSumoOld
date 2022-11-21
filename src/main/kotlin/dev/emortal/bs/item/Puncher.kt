@@ -20,7 +20,7 @@ object Puncher : Powerup(
     PowerupInteractType.ATTACK,
     SpawnType.MIDDLE,
     {
-        it.enchantment(Enchantment.KNOCKBACK, 5)
+        it.enchantment(Enchantment.KNOCKBACK, 4)
     }
 ) {
 

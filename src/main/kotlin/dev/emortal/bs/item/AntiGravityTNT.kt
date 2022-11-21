@@ -21,7 +21,7 @@ object AntiGravityTNT : Powerup(
     Component.text("Anti-Gravity TNT", NamedTextColor.AQUA),
     "antitnt",
     Material.LIGHT_BLUE_CONCRETE_POWDER,
-    Rarity.RARE,
+    Rarity.UNCOMMON,
     PowerupInteractType.PLACE,
     SpawnType.EVERYWHERE
 ) {

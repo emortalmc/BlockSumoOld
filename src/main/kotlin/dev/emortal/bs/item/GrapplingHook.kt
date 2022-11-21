@@ -12,7 +12,7 @@ import world.cepi.kstom.util.playSound
 
 object GrapplingHook : Powerup(
     "<gold>Grappling Hook".asMini(),
-    "grapplehook", // thanks SLL for name :)
+    "grapplehook",
     Material.FISHING_ROD,
     Rarity.LEGENDARY,
     PowerupInteractType.OTHER,

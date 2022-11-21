@@ -4,15 +4,17 @@ import dev.emortal.bs.game.BlockSumoGame
 import dev.emortal.bs.game.BlockSumoPlayerHelper.canBeHit
 import dev.emortal.bs.game.BlockSumoPlayerHelper.hasSpawnProtection
 import dev.emortal.bs.item.Powerup.Companion.getHeldPowerup
+import dev.emortal.bs.item.Snowball
+import dev.emortal.bs.util.RaycastResultType
+import dev.emortal.bs.util.RaycastUtil
+import dev.emortal.immortal.util.takeKnockback
 import net.minestom.server.coordinate.Vec
-import net.minestom.server.entity.Entity
-import net.minestom.server.entity.EntityType
-import net.minestom.server.entity.GameMode
-import net.minestom.server.entity.Player
+import net.minestom.server.entity.*
 import net.minestom.server.entity.Player.Hand
 import net.minestom.server.entity.damage.DamageType
 import net.minestom.server.entity.metadata.other.FishingHookMeta
 import net.minestom.server.item.Material
+import net.minestom.server.timer.TaskSchedule
 import java.lang.Math.PI
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
@@ -41,31 +43,33 @@ class FishingBobber(val shooter: Player, val game: BlockSumoGame) : Entity(Entit
         ownerEntity = shooter
     }
 
-    override fun remove() {
-        super.remove()
-    }
-
     override fun update(time: Long) {
         if (shouldStopFishing(shooter)) {
             remove()
             ownerEntity = null
             hookedEntity = null
             game.bobbers.remove(shooter.uuid)
+            game.hookedPlayer.remove(shooter.uuid)
             return
         }
 
-        val expandedBox = this.boundingBox.expand(0.7, 0.7, 0.7)
-        val hitPlayer = instance.entities
-            .filterIsInstance<Player>()
-            .filter { it != shooter && it.gameMode == GameMode.SURVIVAL }
-            .firstOrNull { expandedBox.intersectEntity(this.position, it) }
+        val raycast = RaycastUtil.raycast(game, position, velocity.normalize(), maxDistance = velocity.div(6.0).length()) {
+            (it != shooter)
+        }
 
-        if (hitPlayer != null && hookedEntity == null) {
-            hookedEntity = hitPlayer
-            game.hookedPlayer[shooter.uuid] = hitPlayer
-            if (hitPlayer.canBeHit && !hitPlayer.hasSpawnProtection)  {
-                hitPlayer.damage(DamageType.fromPlayer(shooter), 0f)
+        when (raycast.resultType) {
+            RaycastResultType.HIT_ENTITY -> {
+                if (hookedEntity == null) {
+                    val hitPlayer = raycast.hitEntity as? Player ?: return
+                    hookedEntity = hitPlayer
+                    game.hookedPlayer[shooter.uuid] = hitPlayer
+                    if (hitPlayer.canBeHit && !hitPlayer.hasSpawnProtection)  {
+                        hitPlayer.damage(DamageType.fromPlayer(shooter), 0f)
+                    }
+                }
             }
+
+            else -> {}
         }
 
     }
@@ -100,7 +104,7 @@ class FishingBobber(val shooter: Player, val game: BlockSumoGame) : Entity(Entit
             cos(playerYaw / 180.0F * PI) * cos(playerPitch / 180.0F * PI) * maxVelocity
         )
             .normalize()
-            .mul(60.0)
+            .mul(45.0)
 
 
     }
