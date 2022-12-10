@@ -14,26 +14,32 @@ import net.minestom.server.entity.EntityProjectile
 import net.minestom.server.entity.EntityType
 import net.minestom.server.entity.Player
 import net.minestom.server.entity.damage.DamageType
+import net.minestom.server.entity.metadata.item.SnowballMeta
+import net.minestom.server.item.ItemStack
 import net.minestom.server.item.Material
 import net.minestom.server.sound.SoundEvent
 import net.minestom.server.timer.TaskSchedule
 import world.cepi.kstom.adventure.asMini
 import world.cepi.kstom.util.playSound
 
-object Snowball : Powerup(
-    "<aqua>Snowball".asMini(),
-    "snowball",
-    Material.SNOWBALL,
+object Slimeball : Powerup(
+    "<green>Slimeball".asMini(),
+    "slimeball",
+    Material.SLIME_BALL,
     Rarity.COMMON,
     PowerupInteractType.FIREBALL_FIX,
     SpawnType.EVERYWHERE,
     amount = 8
 ) {
 
+    private val slimeItem = ItemStack.of(Material.SLIME_BALL)
+
     override fun use(game: BlockSumoGame, player: Player, hand: Player.Hand, pos: Pos?, entity: Entity?) {
         removeOne(player, hand)
 
         val snowball = EntityProjectile(player, EntityType.SNOWBALL)
+        val meta = snowball.entityMeta as SnowballMeta
+        meta.item = slimeItem
         snowball.setTag(itemIdTag, id)
         snowball.setBoundingBox(0.1, 0.1, 0.1)
         snowball.velocity = player.position.direction().mul(30.0)
@@ -61,7 +67,6 @@ object Snowball : Powerup(
 
                 when (raycast.resultType) {
                     RaycastResultType.HIT_BLOCK -> {
-
                         collide(game, snowball)
                         return@submitTask TaskSchedule.stop()
                     }
@@ -84,7 +89,7 @@ object Snowball : Powerup(
                         }.delay(TaskSchedule.tick(10)).schedule()
 
                         entity.damage(DamageType.fromPlayer(player), 0f)
-                        entity.takeKnockback(lastPos)
+                        entity.takeKnockback(lastPos, -0.8)
 
                         return@submitTask TaskSchedule.stop()
                     }

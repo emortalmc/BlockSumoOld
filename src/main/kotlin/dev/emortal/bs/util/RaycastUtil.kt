@@ -11,6 +11,7 @@ import net.minestom.server.coordinate.Pos
 import net.minestom.server.coordinate.Vec
 import net.minestom.server.entity.Entity
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.sqrt
 
 /**
  * Class to make Rayfast easier to use with Minestom
@@ -67,6 +68,35 @@ object RaycastUtil {
         return null
     }
 
+    fun raycastEntitySquared(
+        game: BlockSumoGame,
+        startPoint: Point,
+        direction: Vec,
+        maxDistanceSquared: Double,
+        hitFilter: (Entity) -> Boolean = { true }
+    ): Pair<Entity, Pos>? {
+
+        game.instance!!.entities
+            .filter { hitFilter.invoke(it) }
+            .filter { it.position.distanceSquared(startPoint) <= maxDistanceSquared }
+            .forEach {
+                val area = it.area3d
+                val pos = it.position
+
+                //val intersection = it.boundingBox.boundingBoxRayIntersectionCheck(startPoint.asVec(), direction, it.position)
+
+                val intersection = area.lineIntersection(
+                    Vector3d.of(startPoint.x() - pos.x, startPoint.y() - pos.y, startPoint.z() - pos.z),
+                    Vector3d.of(direction.x(), direction.y(), direction.z())
+                )
+                if (intersection != null) {
+                    return Pair(it, Pos(intersection[0] + pos.x, intersection[1] + pos.y, intersection[2] + pos.z))
+                }
+            }
+
+        return null
+    }
+
     fun raycastEntity(
         game: BlockSumoGame,
         startPoint: Point,
@@ -105,6 +135,43 @@ object RaycastUtil {
     ): RaycastResult {
         val blockRaycast = raycastBlock(game, startPoint, direction, maxDistance)
         val entityRaycast = raycastEntity(game, startPoint, direction, maxDistance, hitFilter)
+
+
+
+        if (entityRaycast == null && blockRaycast == null) {
+            return RaycastResult(RaycastResultType.HIT_NOTHING, null, null)
+        }
+
+        if (entityRaycast == null) {
+            return RaycastResult(RaycastResultType.HIT_BLOCK, null, blockRaycast)
+        }
+
+        if (blockRaycast == null) {
+            return RaycastResult(RaycastResultType.HIT_ENTITY, entityRaycast.first, entityRaycast.second)
+        }
+
+        // Both entity and block check have collided, time to see which is closer!
+
+        val distanceFromEntity = startPoint.distanceSquared(entityRaycast.second)
+        val distanceFromBlock = startPoint.distanceSquared(blockRaycast)
+
+        return if (distanceFromBlock > distanceFromEntity) {
+            RaycastResult(RaycastResultType.HIT_ENTITY, entityRaycast.first, entityRaycast.second)
+        } else {
+            RaycastResult(RaycastResultType.HIT_BLOCK, null, blockRaycast)
+        }
+
+    }
+
+    fun raycastSquared(
+        game: BlockSumoGame,
+        startPoint: Point,
+        direction: Vec,
+        maxDistanceSquared: Double,
+        hitFilter: (Entity) -> Boolean = { true }
+    ): RaycastResult {
+        val blockRaycast = raycastBlock(game, startPoint, direction, sqrt(maxDistanceSquared))
+        val entityRaycast = raycastEntity(game, startPoint, direction, maxDistanceSquared, hitFilter)
 
 
 

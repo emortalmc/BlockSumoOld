@@ -21,8 +21,6 @@ class MongoStorage {
         var database: CoroutineDatabase? = null
 
         var playerSettings: CoroutineCollection<PlayerSettings>? = null
-
-        val mongoScope = CoroutineScope(Dispatchers.IO)
     }
 
     fun init() {

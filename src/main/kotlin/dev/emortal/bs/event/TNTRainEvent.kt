@@ -37,7 +37,7 @@ class TNTRainEvent : Event() {
                 Sound.Source.MASTER,
                 0.7f,
                 1.2f
-            )
+            ), Sound.Emitter.self()
         )
 
         var currentIteration = 0

@@ -30,7 +30,7 @@ class MapClearEvent : Event() {
                 Sound.Source.MASTER,
                 0.7f,
                 1.2f
-            )
+            ), Sound.Emitter.self()
         )
 
         val iterations = 80-63
@@ -51,7 +51,8 @@ class MapClearEvent : Event() {
             }
             batch.apply(game.instance!!) {}
             game.playSound(
-                Sound.sound(SoundEvent.ENTITY_EGG_THROW, Sound.Source.BLOCK, 1f, 0.5f)
+                Sound.sound(SoundEvent.ENTITY_EGG_THROW, Sound.Source.BLOCK, 1f, 0.5f),
+                Sound.Emitter.self()
             )
 
             currentIteration++

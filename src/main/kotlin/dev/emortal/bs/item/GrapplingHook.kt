@@ -14,7 +14,7 @@ object GrapplingHook : Powerup(
     "<gold>Grappling Hook".asMini(),
     "grapplehook",
     Material.FISHING_ROD,
-    Rarity.LEGENDARY,
+    Rarity.RARE,
     PowerupInteractType.OTHER,
     SpawnType.MIDDLE
 ) {

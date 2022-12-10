@@ -26,7 +26,7 @@ object Switcheroo : Powerup(
     "switchyboi", // thanks SLL for name :)
     Material.ENDER_EYE,
     Rarity.LEGENDARY,
-    PowerupInteractType.USE,
+    PowerupInteractType.FIREBALL_FIX,
     SpawnType.MIDDLE
 ) {
 

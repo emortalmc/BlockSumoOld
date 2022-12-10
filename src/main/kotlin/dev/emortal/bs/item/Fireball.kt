@@ -2,14 +2,18 @@ package dev.emortal.bs.item
 
 import dev.emortal.bs.entity.NoDragEntity
 import dev.emortal.bs.game.BlockSumoGame
+import dev.emortal.immortal.game.GameManager
 import dev.emortal.immortal.util.MinestomRunnable
+import kotlinx.coroutines.NonCancellable.cancel
 import net.kyori.adventure.sound.Sound
+import net.minestom.server.MinecraftServer
 import net.minestom.server.coordinate.Pos
 import net.minestom.server.entity.Entity
 import net.minestom.server.entity.EntityType
 import net.minestom.server.entity.Player
 import net.minestom.server.item.Material
 import net.minestom.server.sound.SoundEvent
+import net.minestom.server.timer.TaskSchedule
 import world.cepi.kstom.adventure.asMini
 import world.cepi.particle.Particle
 import world.cepi.particle.ParticleType
@@ -33,8 +37,9 @@ object Fireball : Powerup(
         fireBall.setNoGravity(true)
         fireBall.setTag(itemIdTag, id)
         fireBall.setTag(entityShooterTag, player.username)
-        fireBall.setBoundingBox(0.2, 0.2, 0.2)
-        fireBall.velocity = player.position.direction().normalize().mul(20.0)
+        fireBall.setBoundingBox(0.6, 0.6, 0.6)
+        val originalVelocity = player.position.direction().normalize().mul(20.0)
+        fireBall.velocity = originalVelocity
 
         val instance = player.instance!!
 
@@ -45,35 +50,33 @@ object Fireball : Powerup(
             player.position
         )
 
-        object : MinestomRunnable(repeat = Duration.ofMillis(50), iterations = 10*20, group = game.runnableGroup) {
-            override fun run() {
-                if (fireBall.velocity.x() == 0.0 || fireBall.velocity.y() == 0.0 || fireBall.velocity.z() == 0.0) {
-                    collide(game, fireBall)
-                    cancel()
-                    return
-                }
-
-                val firstCollide = game.players.filter { it != player }.firstOrNull { it.boundingBox.intersectEntity(it.position, fireBall) }
-                if (firstCollide != null) {
-                    collide(game, fireBall)
-                    cancel()
-                    return
-                }
-
-                player.instance!!.showParticle(
-                    Particle.particle(
-                        type = ParticleType.LARGE_SMOKE,
-                        count = 1,
-                        data = OffsetAndSpeed(0f, 0f, 0f, 0f),
-                    ),
-                    fireBall.position.asVec()
-                )
-            }
-
-            override fun cancelled() {
+        fireBall.scheduler().submitTask {
+            if (fireBall.aliveTicks > 5 * MinecraftServer.TICK_PER_SECOND) {
                 fireBall.remove()
+                return@submitTask TaskSchedule.stop()
             }
 
+            if (!fireBall.velocity.sameBlock(originalVelocity)) {
+                collide(game, fireBall)
+                return@submitTask TaskSchedule.stop()
+            }
+
+            val firstCollide = game.players.filter { !it.hasTag(GameManager.spectatingTag) && it != player }.firstOrNull { it.boundingBox.intersectEntity(it.position, fireBall) }
+            if (firstCollide != null) {
+                collide(game, fireBall)
+                return@submitTask TaskSchedule.stop()
+            }
+
+            player.instance!!.showParticle(
+                Particle.particle(
+                    type = ParticleType.LARGE_SMOKE,
+                    count = 1,
+                    data = OffsetAndSpeed(0f, 0f, 0f, 0f),
+                ),
+                fireBall.position.asVec()
+            )
+
+            return@submitTask TaskSchedule.nextTick()
         }
     }
 

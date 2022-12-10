@@ -2,6 +2,7 @@ package dev.emortal.bs.item
 
 import dev.emortal.bs.BlockSumoExtension
 import dev.emortal.bs.game.BlockSumoGame
+import dev.emortal.immortal.game.GameManager
 import dev.emortal.immortal.util.MinestomRunnable
 import net.kyori.adventure.sound.Sound
 import net.minestom.server.MinecraftServer
@@ -20,13 +21,14 @@ import world.cepi.particle.ParticleType
 import world.cepi.particle.data.OffsetAndSpeed
 import world.cepi.particle.showParticle
 import java.time.Duration
+import kotlin.math.abs
 
 object EnderPearl : Powerup(
     "<gradient:blue:light_purple>Ender Pearl".asMini(),
     "pearl",
     Material.ENDER_PEARL,
     Rarity.RARE,
-    PowerupInteractType.USE,
+    PowerupInteractType.FIREBALL_FIX,
     SpawnType.MIDDLE
 ) {
 
@@ -52,13 +54,24 @@ object EnderPearl : Powerup(
             }
 
             if (pearl.velocity.x() == 0.0 || pearl.velocity.y() == 0.0 || pearl.velocity.z() == 0.0) {
+                // Don't allow ender pearl to hit border and teleport player
+                val shrunkBorder = (game.borderSize/2.0) - 1.5
+                if (abs(pearl.position.x()) > shrunkBorder) {
+                    pearl.remove()
+                    return@submitTask TaskSchedule.stop()
+                }
+                if (abs(pearl.position.z()) > shrunkBorder) {
+                    pearl.remove()
+                    return@submitTask TaskSchedule.stop()
+                }
+
                 lastPos?.let { player.teleport(it.withDirection(player.position.direction())) }
 
                 collide(game, pearl)
                 return@submitTask TaskSchedule.stop()
             }
 
-            val firstCollide = game.players.filter { it != player }.firstOrNull { it.boundingBox.intersectEntity(it.position, pearl) }
+            val firstCollide = game.players.filter { !it.hasTag(GameManager.spectatingTag) && it != player }.firstOrNull { it.boundingBox.intersectEntity(it.position, pearl) }
             if (firstCollide != null) {
                 lastPos?.let { player.teleport(it.withDirection(player.position.direction())) }
 
