@@ -1,20 +1,13 @@
 package dev.emortal.bs.event
 
 import dev.emortal.bs.game.BlockSumoGame
-import dev.emortal.bs.item.Item
-import dev.emortal.bs.item.TNT
-import dev.emortal.immortal.util.MinestomRunnable
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
-import net.minestom.server.entity.Entity
-import net.minestom.server.entity.EntityType
 import net.minestom.server.entity.GameMode
-import net.minestom.server.entity.metadata.other.PrimedTntMeta
 import net.minestom.server.sound.SoundEvent
 import net.minestom.server.timer.TaskSchedule
-import world.cepi.kstom.Manager
 import java.time.Duration
 
 class TNTRainEvent : Event() {

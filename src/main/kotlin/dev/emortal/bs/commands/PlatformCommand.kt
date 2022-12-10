@@ -1,17 +1,12 @@
 package dev.emortal.bs.commands
 
-import dev.emortal.bs.game.BlockSumoPlayerHelper
-import dev.emortal.bs.item.Powerup
 import dev.emortal.immortal.luckperms.PermissionUtils.hasLuckPermission
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.minestom.server.command.builder.Command
-import net.minestom.server.command.builder.arguments.ArgumentType
 import net.minestom.server.entity.Player
 import net.minestom.server.instance.batch.AbsoluteBlockBatch
 import net.minestom.server.instance.block.Block
-import world.cepi.kstom.command.arguments.suggest
-import world.cepi.kstom.command.kommand.Kommand
 
 object PlatformCommand : Command("platform") {
 

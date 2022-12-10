@@ -5,7 +5,6 @@ import dev.emortal.bs.util.RaycastResultType
 import dev.emortal.bs.util.RaycastUtil
 import net.kyori.adventure.sound.Sound
 import net.minestom.server.coordinate.Pos
-import net.minestom.server.coordinate.Vec
 import net.minestom.server.entity.Entity
 import net.minestom.server.entity.GameMode
 import net.minestom.server.entity.Player
@@ -14,7 +13,6 @@ import net.minestom.server.sound.SoundEvent
 import world.cepi.kstom.adventure.asMini
 import world.cepi.kstom.util.asVec
 import world.cepi.kstom.util.eyePosition
-import world.cepi.kstom.util.playSound
 import world.cepi.particle.Particle
 import world.cepi.particle.ParticleType
 import world.cepi.particle.data.OffsetAndSpeed

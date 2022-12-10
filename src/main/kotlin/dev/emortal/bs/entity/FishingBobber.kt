@@ -4,20 +4,18 @@ import dev.emortal.bs.game.BlockSumoGame
 import dev.emortal.bs.game.BlockSumoPlayerHelper.canBeHit
 import dev.emortal.bs.game.BlockSumoPlayerHelper.hasSpawnProtection
 import dev.emortal.bs.item.Powerup.Companion.getHeldPowerup
-import dev.emortal.bs.item.Snowball
 import dev.emortal.bs.util.RaycastResultType
 import dev.emortal.bs.util.RaycastUtil
-import dev.emortal.immortal.util.takeKnockback
 import net.minestom.server.coordinate.Vec
-import net.minestom.server.entity.*
+import net.minestom.server.entity.Entity
+import net.minestom.server.entity.EntityType
+import net.minestom.server.entity.GameMode
+import net.minestom.server.entity.Player
 import net.minestom.server.entity.Player.Hand
 import net.minestom.server.entity.damage.DamageType
 import net.minestom.server.entity.metadata.other.FishingHookMeta
 import net.minestom.server.item.Material
-import net.minestom.server.timer.TaskSchedule
 import java.lang.Math.PI
-import java.util.*
-import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.cos
 import kotlin.math.sin
 

@@ -3,8 +3,6 @@ package dev.emortal.bs.item
 import dev.emortal.bs.entity.NoDragEntity
 import dev.emortal.bs.game.BlockSumoGame
 import dev.emortal.immortal.game.GameManager
-import dev.emortal.immortal.util.MinestomRunnable
-import kotlinx.coroutines.NonCancellable.cancel
 import net.kyori.adventure.sound.Sound
 import net.minestom.server.MinecraftServer
 import net.minestom.server.coordinate.Pos
@@ -19,7 +17,6 @@ import world.cepi.particle.Particle
 import world.cepi.particle.ParticleType
 import world.cepi.particle.data.OffsetAndSpeed
 import world.cepi.particle.showParticle
-import java.time.Duration
 
 object Fireball : Powerup(
     "<gold>Fireball".asMini(),

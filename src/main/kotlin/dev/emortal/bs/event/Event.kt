@@ -5,7 +5,6 @@ import dev.emortal.immortal.util.MinestomRunnable
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
-import world.cepi.kstom.Manager
 import java.time.Duration
 import kotlin.reflect.full.primaryConstructor
 

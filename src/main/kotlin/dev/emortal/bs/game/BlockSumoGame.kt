@@ -2,7 +2,6 @@ package dev.emortal.bs.game
 
 import dev.emortal.bs.BlockSumoExtension
 import dev.emortal.bs.commands.NoKBCommand
-import dev.emortal.bs.db.MongoStorage
 import dev.emortal.bs.entity.FishingBobber
 import dev.emortal.bs.event.Event
 import dev.emortal.bs.game.BlockSumoPlayerHelper.canBeHit
@@ -61,7 +60,6 @@ import net.minestom.server.item.Material
 import net.minestom.server.item.firework.FireworkEffect
 import net.minestom.server.item.firework.FireworkEffectType
 import net.minestom.server.item.metadata.LeatherArmorMeta
-import net.minestom.server.network.packet.server.play.BlockChangePacket
 import net.minestom.server.network.packet.server.play.EffectPacket
 import net.minestom.server.network.packet.server.play.ExplosionPacket
 import net.minestom.server.network.packet.server.play.TeamsPacket
@@ -73,8 +71,6 @@ import net.minestom.server.utils.Direction
 import net.minestom.server.utils.time.TimeUnit
 import org.tinylog.kotlin.Logger
 import world.cepi.kstom.Manager
-import world.cepi.kstom.adventure.color
-import world.cepi.kstom.adventure.plainText
 import world.cepi.kstom.event.listenOnly
 import world.cepi.kstom.util.asPos
 import world.cepi.kstom.util.playSound

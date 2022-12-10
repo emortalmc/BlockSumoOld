@@ -10,7 +10,6 @@ import net.minestom.server.entity.Player
 import net.minestom.server.item.Enchantment
 import net.minestom.server.item.Material
 import net.minestom.server.sound.SoundEvent
-import world.cepi.kstom.util.playSound
 
 object Puncher : Powerup(
     Component.text("Puncher", NamedTextColor.RED),

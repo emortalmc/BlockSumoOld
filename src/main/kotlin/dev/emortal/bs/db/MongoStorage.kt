@@ -2,8 +2,6 @@ package dev.emortal.bs.db
 
 import com.mongodb.client.model.ReplaceOptions
 import dev.emortal.bs.BlockSumoExtension
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.litote.kmongo.coroutine.CoroutineClient
 import org.litote.kmongo.coroutine.CoroutineCollection
