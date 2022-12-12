@@ -1,7 +1,7 @@
 package dev.emortal.bs.db
 
 import com.mongodb.client.model.ReplaceOptions
-import dev.emortal.bs.BlockSumoExtension
+import dev.emortal.bs.BlockSumoMain
 import kotlinx.coroutines.runBlocking
 import org.litote.kmongo.coroutine.CoroutineClient
 import org.litote.kmongo.coroutine.CoroutineCollection
@@ -22,7 +22,7 @@ class MongoStorage {
     }
 
     fun init() {
-        client = KMongo.createClient(BlockSumoExtension.databaseConfig.connectionString).coroutine
+        client = KMongo.createClient(BlockSumoMain.databaseConfig.connectionString).coroutine
         database = client!!.getDatabase("BlockSumo")
 
         playerSettings = database!!.getCollection("playersettings")

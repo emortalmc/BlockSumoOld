@@ -1,6 +1,6 @@
 package dev.emortal.bs.commands
 
-import dev.emortal.bs.BlockSumoExtension
+import dev.emortal.bs.BlockSumoMain
 import dev.emortal.bs.db.PlayerSettings
 import dev.emortal.bs.game.BlockSumoGame
 import dev.emortal.immortal.game.GameManager.game
@@ -33,7 +33,7 @@ object SaveLoudoutCommand : Kommand({
             return@default
         }
 
-        BlockSumoExtension.mongoStorage?.saveSettings(player.uuid, PlayerSettings(player.uuid.toString(), woolSlot!!, shearSlot!!))
+        BlockSumoMain.mongoStorage?.saveSettings(player.uuid, PlayerSettings(player.uuid.toString(), woolSlot!!, shearSlot!!))
         player.setTag(BlockSumoGame.woolSlot, woolSlot)
         player.setTag(BlockSumoGame.shearsSlot, shearSlot)
 

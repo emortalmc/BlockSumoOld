@@ -1,8 +1,8 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    id("org.jetbrains.kotlin.jvm") version "1.7.20"
-    kotlin("plugin.serialization") version "1.7.20"
+    id("org.jetbrains.kotlin.jvm") version "1.7.22"
+    kotlin("plugin.serialization") version "1.7.22"
     id("com.github.johnrengelman.shadow") version "7.1.2"
 
     java
@@ -15,25 +15,31 @@ repositories {
 }
 
 dependencies {
-    compileOnly("com.github.Minestom:Minestom:d7feed23c8")
-    compileOnly("dev.emortal.immortal:Immortal:3.0.1")
+    implementation("com.github.Minestom:Minestom:d7feed23c8")
+    implementation("dev.emortal.immortal:Immortal:3.0.1")
 
-    compileOnly("org.litote.kmongo:kmongo-coroutine-serialization:4.8.0")
     compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.4.1")
     compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
 }
 
 tasks {
-    processResources {
-        filesMatching("extension.json") {
-            expand(project.properties)
-        }
-    }
-
     named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
         archiveBaseName.set(project.name)
         mergeServiceFiles()
-        minimize()
+
+        manifest {
+            attributes (
+                "Main-Class" to "dev.emortal.bs.BlockSumoMainKt",
+                "Multi-Release" to true
+            )
+        }
+
+        transform(com.github.jengelman.gradle.plugins.shadow.transformers.Log4j2PluginsCacheFileTransformer::class.java)
+    }
+
+    withType<AbstractArchiveTask> {
+        isPreserveFileTimestamps = false
+        isReproducibleFileOrder = true
     }
 
     build { dependsOn(shadowJar) }
