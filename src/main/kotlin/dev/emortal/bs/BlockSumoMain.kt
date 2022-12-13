@@ -10,7 +10,6 @@ import dev.emortal.immortal.game.GameManager
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
-import org.litote.kmongo.serialization.SerializationClassMappingTypeService
 import org.tinylog.kotlin.Logger
 import world.cepi.kstom.command.register
 import java.nio.file.Path

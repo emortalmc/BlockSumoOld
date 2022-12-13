@@ -28,6 +28,7 @@ import net.kyori.adventure.sound.Sound.Emitter
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextColor
+import net.kyori.adventure.text.format.TextColor.color
 import net.kyori.adventure.text.format.TextColor.lerp
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.minimessage.MiniMessage
@@ -80,8 +81,6 @@ import world.cepi.particle.Particle
 import world.cepi.particle.ParticleType
 import world.cepi.particle.data.OffsetAndSpeed
 import world.cepi.particle.renderer.Renderer
-import world.cepi.particle.renderer.shape.CircleRenderer
-import world.cepi.particle.renderer.translate
 import world.cepi.particle.showParticle
 import java.nio.file.Files
 import java.nio.file.Path
@@ -802,27 +801,38 @@ class BlockSumoGame : PvpGame() {
         updateScoreboard(player)
 
         var currentIter = 0
-        respawnTasks[player.uuid] = player.scheduler().buildTask {
+        respawnTasks[player.uuid] = player.scheduler().submitTask {
+            if (currentIter == 0) {
+                currentIter++
+                return@submitTask TaskSchedule.seconds(2)
+            }
+
+            if (currentIter >= 4) {
+                player.respawnPoint = getRandomRespawnPosition()
+                respawn(player)
+                return@submitTask TaskSchedule.stop()
+            }
             if (currentIter == 1) {
                 if (killer != null && killer is Player) player.spectate(killer)
             }
 
             player.playSound(
-                Sound.sound(SoundEvent.BLOCK_WOODEN_BUTTON_CLICK_ON, Sound.Source.BLOCK, 1f, 1f),
+                Sound.sound(SoundEvent.BLOCK_METAL_BREAK, Sound.Source.BLOCK, 1f, 2f),
                 Emitter.self()
             )
             player.showTitle(
                 Title.title(
-                    Component.text(3 - currentIter, NamedTextColor.GOLD, TextDecoration.BOLD),
+                    Component.text(4 - currentIter, lerp(currentIter / 3f, NamedTextColor.GREEN, NamedTextColor.RED), TextDecoration.BOLD),
                     Component.empty(),
                     Title.Times.times(
-                        Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(1)
+                        Duration.ZERO, Duration.ofMillis(800), Duration.ofMillis(200)
                     )
                 )
             )
 
             currentIter++
-        }.delay(TaskSchedule.seconds(2)).repeat(TaskSchedule.seconds(1)).schedule()
+            TaskSchedule.seconds(1)
+        }
 
     }
 
@@ -861,24 +871,29 @@ class BlockSumoGame : PvpGame() {
         lastDamageTimestamp = 0
         setCanPickupItem(true)
 
-        var startingSecs = 4
-        var i = 0.0
+        val expansion = 0.15
+        var currentIter = 0
         spawnProtIndicatorTasks[uuid] = player.scheduler().submitTask {
-            i += 0.1
+            if (currentIter > 80) {
+                player.playSound(Sound.sound(SoundEvent.ENTITY_GENERIC_EXTINGUISH_FIRE, Sound.Source.MASTER, 0.75f, 1f), Sound.Emitter.self())
+                return@submitTask TaskSchedule.stop()
+            }
 
             this@BlockSumoGame.showParticle(
                 Particle.particle(
-                    type = ParticleType.HAPPY_VILLAGER,
+                    type = ParticleType.BUBBLE,
                     data = OffsetAndSpeed(),
                     count = 1
                 ),
                 Renderer.fixedRectangle(
-                    player.position.add(player.boundingBox.minX(), player.boundingBox.minY(), player.boundingBox.minZ()).asVec(),
-                    player.position.add(player.boundingBox.maxX(), player.boundingBox.maxY(), player.boundingBox.maxZ()).asVec()
+                    player.position.add(player.boundingBox.minX() - expansion, player.boundingBox.minY() - expansion, player.boundingBox.minZ() - expansion).asVec(),
+                    player.position.add(player.boundingBox.maxX() + expansion, player.boundingBox.maxY() + expansion, player.boundingBox.maxZ() + expansion).asVec()
                 )
             )
 
-            TaskSchedule.tick(2)
+            currentIter++
+
+            TaskSchedule.tick(1)
         }
 
 
