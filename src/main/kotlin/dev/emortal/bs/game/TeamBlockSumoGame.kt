@@ -2,7 +2,6 @@ package dev.emortal.bs.game
 
 import dev.emortal.bs.game.BlockSumoPlayerHelper.color
 import dev.emortal.bs.game.BlockSumoPlayerHelper.lives
-import dev.emortal.immortal.game.GameManager
 import dev.emortal.immortal.game.Team
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor

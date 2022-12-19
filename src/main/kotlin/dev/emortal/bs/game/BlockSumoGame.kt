@@ -16,7 +16,6 @@ import dev.emortal.bs.game.BlockSumoPlayerHelper.spawnProtectionMillis
 import dev.emortal.bs.item.*
 import dev.emortal.bs.item.Powerup.Companion.getHeldPowerup
 import dev.emortal.bs.util.SphereUtil
-import dev.emortal.immortal.game.GameManager
 import dev.emortal.immortal.game.GameState
 import dev.emortal.immortal.game.PvpGame
 import dev.emortal.immortal.game.Team
@@ -28,7 +27,6 @@ import net.kyori.adventure.sound.Sound.Emitter
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextColor
-import net.kyori.adventure.text.format.TextColor.color
 import net.kyori.adventure.text.format.TextColor.lerp
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.minimessage.MiniMessage
@@ -55,7 +53,6 @@ import net.minestom.server.instance.AnvilLoader
 import net.minestom.server.instance.Chunk
 import net.minestom.server.instance.Instance
 import net.minestom.server.instance.batch.AbsoluteBlockBatch
-import net.minestom.server.instance.batch.BatchOption
 import net.minestom.server.instance.block.Block
 import net.minestom.server.item.ItemStack
 import net.minestom.server.item.Material
@@ -79,11 +76,6 @@ import world.cepi.kstom.util.asPos
 import world.cepi.kstom.util.playSound
 import world.cepi.kstom.util.roundToBlock
 import world.cepi.kstom.util.sendBreakBlockEffect
-import world.cepi.particle.Particle
-import world.cepi.particle.ParticleType
-import world.cepi.particle.data.OffsetAndSpeed
-import world.cepi.particle.renderer.Renderer
-import world.cepi.particle.showParticle
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -221,10 +213,12 @@ open class BlockSumoGame : PvpGame() {
         scoreboard?.removeLine(player.uuid.toString())
 
         val alivePlayers = players.filter { it.lives > 0 }
-        if (alivePlayers.size == 1) {
+        if (alivePlayers.isNotEmpty()) {
             if (gameState != GameState.PLAYING) return
-
-            victory(alivePlayers.first())
+            val firstPlayer = alivePlayers.first()
+            if (alivePlayers.all { it.color == firstPlayer.color }) {
+                victory(alivePlayers)
+            }
         }
     }
 
@@ -345,7 +339,12 @@ open class BlockSumoGame : PvpGame() {
             }
 
             val alivePlayers = players.filter { it.lives > 0 }
-            if (alivePlayers.size == 1) victory(alivePlayers.first())
+            if (alivePlayers.isNotEmpty()) {
+                val firstPlayer = alivePlayers.first()
+                if (alivePlayers.all { it.color == firstPlayer.color }) {
+                    victory(alivePlayers)
+                }
+            }
 
             sendMessage(message)
             player.showTitle(Title.title(
@@ -736,7 +735,7 @@ open class BlockSumoGame : PvpGame() {
                         val seconds = diamondBlockTime - currentIter
 
                         if (seconds <= 0) {
-                            victory(player)
+                            victory(players.filter { it.lives > 0 && it.color == player.color })
                             return@submitTask TaskSchedule.stop()
                         }
 

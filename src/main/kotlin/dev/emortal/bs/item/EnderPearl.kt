@@ -1,7 +1,6 @@
 package dev.emortal.bs.item
 
 import dev.emortal.bs.game.BlockSumoGame
-import dev.emortal.immortal.game.GameManager
 import net.kyori.adventure.sound.Sound
 import net.minestom.server.MinecraftServer
 import net.minestom.server.coordinate.Pos
