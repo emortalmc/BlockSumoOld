@@ -25,7 +25,7 @@ object TNT : Powerup(
 
         removeOne(player, hand)
 
-        game.spawnTnt(pos, 60, 3, 35.0, 5.5)
+        game.spawnTnt(pos, 60, 3, 35.0, 5.5, true, player)
     }
 
 }

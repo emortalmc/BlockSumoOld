@@ -58,7 +58,7 @@ object Fireball : Powerup(
                 return@submitTask TaskSchedule.stop()
             }
 
-            val firstCollide = game.players.filter { !it.hasTag(GameManager.spectatingTag) && it != player }.firstOrNull { it.boundingBox.intersectEntity(it.position, fireBall) }
+            val firstCollide = game.players.filter { it != player }.firstOrNull { it.boundingBox.intersectEntity(it.position, fireBall) }
             if (firstCollide != null) {
                 collide(game, fireBall)
                 return@submitTask TaskSchedule.stop()
@@ -78,7 +78,9 @@ object Fireball : Powerup(
     }
 
     override fun collide(game: BlockSumoGame, entity: Entity) {
-        game.explode(entity.position, 3, 35.0, 5.5, true, entity)
+        val shooter = game.players.first { entity.getTag(entityShooterTag) == it.username }
+
+        game.explode(entity.position, 3, 35.0, 5.5, true, shooter, entity)
 
         entity.remove()
     }

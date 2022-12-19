@@ -4,6 +4,7 @@ import dev.emortal.bs.commands.*
 import dev.emortal.bs.config.DatabaseConfig
 import dev.emortal.bs.db.MongoStorage
 import dev.emortal.bs.game.BlockSumoGame
+import dev.emortal.bs.game.TeamBlockSumoGame
 import dev.emortal.immortal.Immortal
 import dev.emortal.immortal.config.ConfigHelper
 import dev.emortal.immortal.game.GameManager
@@ -29,6 +30,11 @@ fun main() {
 
     GameManager.registerGame<BlockSumoGame>(
         "blocksumo",
+        Component.text("Block Sumo", NamedTextColor.YELLOW, TextDecoration.BOLD),
+        showsInSlashPlay = true
+    )
+    GameManager.registerGame<TeamBlockSumoGame>(
+        "teamblocksumo",
         Component.text("Block Sumo", NamedTextColor.YELLOW, TextDecoration.BOLD),
         showsInSlashPlay = true
     )

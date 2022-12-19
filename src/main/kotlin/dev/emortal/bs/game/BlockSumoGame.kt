@@ -55,6 +55,7 @@ import net.minestom.server.instance.AnvilLoader
 import net.minestom.server.instance.Chunk
 import net.minestom.server.instance.Instance
 import net.minestom.server.instance.batch.AbsoluteBlockBatch
+import net.minestom.server.instance.batch.BatchOption
 import net.minestom.server.instance.block.Block
 import net.minestom.server.item.ItemStack
 import net.minestom.server.item.Material
@@ -77,6 +78,7 @@ import world.cepi.kstom.event.listenOnly
 import world.cepi.kstom.util.asPos
 import world.cepi.kstom.util.playSound
 import world.cepi.kstom.util.roundToBlock
+import world.cepi.kstom.util.sendBreakBlockEffect
 import world.cepi.particle.Particle
 import world.cepi.particle.ParticleType
 import world.cepi.particle.data.OffsetAndSpeed
@@ -95,7 +97,7 @@ import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 
-class BlockSumoGame : PvpGame() {
+open class BlockSumoGame : PvpGame() {
 
     companion object {
         val loadoutNotificationTag = Tag.Boolean("hadNotification")
@@ -103,7 +105,7 @@ class BlockSumoGame : PvpGame() {
         val shearsSlot = Tag.Integer("shearsSlot")
     }
 
-    override val maxPlayers: Int = 15
+    override val maxPlayers: Int = 14
     override val minPlayers: Int = 2
     override val countdownSeconds: Int = 30
     override val canJoinDuringGame: Boolean = false
@@ -111,7 +113,7 @@ class BlockSumoGame : PvpGame() {
     override val showsJoinLeaveMessages: Boolean = true
     override val allowsSpectators: Boolean = true
 
-
+    var diamondBlockTime = 20
     private var diamondBlockTask: Task? = null
     private var diamondBlockPlayer: UUID? = null
 
@@ -125,11 +127,9 @@ class BlockSumoGame : PvpGame() {
 
     var borderSize = 40.0
 
-    var diamondBlockTime = 20
-
     var currentEvent: Event? = null
 
-    val spawnPos = Pos(0.5, 65.0, 0.5)
+    private val spawnPos = Pos(0.5, 65.0, 0.5)
     override fun getSpawnPosition(player: Player, spectator: Boolean): Pos = spawnPos
 
     fun updateScoreboard(player: Player) {
@@ -139,7 +139,7 @@ class BlockSumoGame : PvpGame() {
         }
 
         if (player.team == null) {
-            val newTeam = Team(player.username, player.color.color, TeamsPacket.CollisionRule.NEVER)
+            val newTeam = Team(player.username, player.color!!.color, TeamsPacket.CollisionRule.NEVER)
             newTeam.add(player)
         }
         player.team.updateSuffix(
@@ -148,7 +148,7 @@ class BlockSumoGame : PvpGame() {
         )
 
         player.displayName = Component.text()
-            .append(Component.text(player.username, TextColor.color(player.color.color)))
+            .append(Component.text(player.username, TextColor.color(player.color!!.color)))
             .append(Component.text(" - ", NamedTextColor.GRAY))
             .append(Component.text(player.lives, livesColor, TextDecoration.BOLD))
             .build()
@@ -174,16 +174,7 @@ class BlockSumoGame : PvpGame() {
                 .armify()
         )
 
-        synchronized(players) {
-            player.color = TeamColor.values().filter { players.filter { !it.hasTag(GameManager.spectatingTag) }.any { plr -> plr.color != it } }.random()
-        }
 
-        val newTeam = Team(player.username, player.color.color, TeamsPacket.CollisionRule.NEVER)
-        newTeam.add(player)
-        newTeam.scoreboardTeam.updateSuffix(
-            Component.text().append(Component.text(" - ", NamedTextColor.GRAY))
-                .append(Component.text("5", NamedTextColor.GREEN, TextDecoration.BOLD)).build()
-        )
 
         if (player.username == "emortaldev") {
             var rainbow = 0f
@@ -208,25 +199,6 @@ class BlockSumoGame : PvpGame() {
             }.repeat(TaskSchedule.nextTick()).schedule()
         }
 
-        player.displayName = Component.text()
-            .append(Component.text(player.username, TextColor.color(player.color.color)))
-            .append(Component.text(" - ", NamedTextColor.GRAY))
-            .append(Component.text("5", NamedTextColor.GREEN, TextDecoration.BOLD))
-            .build()
-
-        try {
-            scoreboard?.createLine(
-                Sidebar.ScoreboardLine(
-                    player.uuid.toString(),
-                    player.displayName!!,
-                    5
-                )
-            )
-        } catch (e: Exception) {
-
-        }
-
-
         player.setCanPickupItem(true)
 
         player.gameMode = GameMode.SPECTATOR
@@ -248,11 +220,270 @@ class BlockSumoGame : PvpGame() {
 
         scoreboard?.removeLine(player.uuid.toString())
 
-        val alivePlayers = players.filter { it.lives > 0 && !it.hasTag(GameManager.spectatingTag) }
+        val alivePlayers = players.filter { it.lives > 0 }
         if (alivePlayers.size == 1) {
             if (gameState != GameState.PLAYING) return
 
             victory(alivePlayers.first())
+        }
+    }
+
+    override fun gameStarted() {
+        initTasks()
+
+        scoreboard?.removeLine("infoLine")
+
+        val angleInc = (2 * PI) / players.size
+        // shuffle to make sure teams aren't the same after each game
+        players.shuffled().forEachIndexed { i, plr ->
+            plr.lives = 5
+            plr.respawnPoint = getCircleSpawnPosition(angleInc * i)
+
+            initPlayerTeam(plr)
+
+            respawn(plr)
+        }
+    }
+
+    override fun gameEnded() {
+        diamondBlockTask?.cancel()
+        respawnTasks.clear()
+        spawnProtIndicatorTasks.clear()
+        blockBreakTasks.clear()
+
+        bobbers.clear()
+        hookedPlayer.clear()
+
+        getPlayers().forEach {
+            it.removeTag(loadoutNotificationTag)
+            it.cleanup()
+        }
+    }
+
+    override fun playerDied(player: Player, killer: Entity?) {
+        if (gameState == GameState.ENDING) {
+            player.teleport(spawnPos)
+            return
+        }
+        player.playSound(Sound.sound(SoundEvent.ENTITY_VILLAGER_DEATH, Sound.Source.PLAYER, 1f, 1f), Emitter.self())
+        player.setCanPickupItem(false)
+        player.inventory.clear()
+        player.velocity = Vec(0.0, 40.0, 0.0)
+
+        player.lives--
+
+        var message: Component
+        val victimTitle: Title
+
+        if (killer != null && killer is Player) {
+            killer.kills++
+            updateScoreboard(killer)
+
+            killer.playSound(Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_PLING, Sound.Source.PLAYER, 1f, 1f), Emitter.self())
+
+            message = Component.text()
+                .append(Component.text("☠", NamedTextColor.RED))
+                .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
+                .append(Component.text(player.username, TextColor.color(player.color!!.color)))
+                .append(Component.text(" was killed by ", NamedTextColor.GRAY))
+                .append(Component.text(killer.username, TextColor.color(killer.color!!.color)))
+                .build()
+
+            killer.showTitle(
+                Title.title(
+                    Component.empty(),
+                    Component.text()
+                        .append(Component.text("☠ ", NamedTextColor.RED))
+                        .append(Component.text(player.username, NamedTextColor.RED))
+                        .build(),
+                    Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ofMillis(500))
+                )
+            )
+
+            victimTitle = Title.title(
+                Component.text("YOU DIED", NamedTextColor.RED, TextDecoration.BOLD),
+                Component.text()
+                    .append(Component.text("Killed by ", NamedTextColor.GRAY))
+                    .append(Component.text(killer.username, TextColor.color(killer.color!!.color)))
+                    .build(),
+                Title.Times.times(
+                    Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(1)
+                )
+            )
+
+        } else {
+
+            message = Component.text()
+                .append(Component.text("☠", NamedTextColor.RED))
+                .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
+                .append(Component.text(player.username, TextColor.color(player.color!!.color)))
+                .append(Component.text(" died", NamedTextColor.GRAY))
+                .build()
+
+
+            victimTitle = Title.title(
+                Component.text("YOU DIED", NamedTextColor.RED, TextDecoration.BOLD),
+                Component.empty(),
+                Title.Times.times(
+                    Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(1)
+                )
+            )
+
+        }
+
+        if (player.lives <= 0) {
+            scoreboard?.removeLine(player.uuid.toString())
+            player.team = null
+
+            message = Component.text()
+                .append(message)
+                .append(Component.text(" FINAL KILL", NamedTextColor.AQUA, TextDecoration.BOLD))
+                .build()
+
+            if (killer != null && killer is Player) {
+                killer.finalKills++
+            }
+
+            val alivePlayers = players.filter { it.lives > 0 }
+            if (alivePlayers.size == 1) victory(alivePlayers.first())
+
+            sendMessage(message)
+            player.showTitle(Title.title(
+                Component.text("YOU DIED", NamedTextColor.RED, TextDecoration.BOLD),
+                Component.text("(Final kill)", NamedTextColor.DARK_GRAY),
+                Title.Times.times(
+                    Duration.ZERO, Duration.ofSeconds(2), Duration.ofSeconds(1)
+                )
+            ))
+
+            player.resetTeam()
+
+            return
+        }
+
+        sendMessage(message)
+        player.showTitle(victimTitle)
+
+        updateScoreboard(player)
+
+        var currentIter = 0
+        respawnTasks[player.uuid] = player.scheduler().submitTask {
+            if (currentIter == 0) {
+                currentIter++
+                return@submitTask TaskSchedule.seconds(2)
+            }
+
+            if (currentIter >= 4) {
+                player.respawnPoint = getRandomRespawnPosition()
+                respawn(player)
+                return@submitTask TaskSchedule.stop()
+            }
+            if (currentIter == 1) {
+                if (killer != null && killer is Player) player.spectate(killer)
+            }
+
+            player.playSound(
+                Sound.sound(SoundEvent.BLOCK_METAL_BREAK, Sound.Source.BLOCK, 1f, 2f),
+                Emitter.self()
+            )
+            player.showTitle(
+                Title.title(
+                    Component.text(4 - currentIter, lerp(currentIter / 3f, NamedTextColor.GREEN, NamedTextColor.RED), TextDecoration.BOLD),
+                    Component.empty(),
+                    Title.Times.times(
+                        Duration.ZERO, Duration.ofMillis(800), Duration.ofMillis(200)
+                    )
+                )
+            )
+
+            currentIter++
+            TaskSchedule.seconds(1)
+        }
+
+    }
+
+    override fun respawn(player: Player): Unit = with(player) {
+        reset()
+
+        teleport(respawnPoint).thenRun {
+            gameMode = GameMode.SURVIVAL
+
+            getAttribute(Attribute.MAX_HEALTH).baseValue = lives * 2f
+            player.health = player.maxHealth
+        }
+
+        chestplate = ItemStack.builder(Material.LEATHER_CHESTPLATE).meta(LeatherArmorMeta::class.java) {
+            it.color(Color(color!!.color))
+        }.build()
+
+        when (username) {
+            "GoldenStack" -> {
+                helmet = ItemStack.of(Material.GOLDEN_HELMET)
+                chestplate = ItemStack.of(Material.GOLDEN_CHESTPLATE)
+                leggings = ItemStack.of(Material.GOLDEN_LEGGINGS)
+                boots = ItemStack.of(Material.GOLDEN_BOOTS)
+            }
+        }
+
+        player.playSound(
+            Sound.sound(SoundEvent.BLOCK_BEACON_ACTIVATE, Sound.Source.MASTER, 1f, 2f),
+            Emitter.self()
+        )
+
+        if (gameState == GameState.ENDING) return
+
+        canBeHit = true
+        spawnProtectionMillis = 4000
+        lastDamageTimestamp = 0
+        setCanPickupItem(true)
+
+        val expansion = 0.15
+        var currentIter = 0
+        spawnProtIndicatorTasks[uuid] = player.scheduler().submitTask {
+            if (currentIter > 80) {
+                player.playSound(Sound.sound(SoundEvent.ENTITY_GENERIC_EXTINGUISH_FIRE, Sound.Source.MASTER, 0.75f, 1f), Sound.Emitter.self())
+                return@submitTask TaskSchedule.stop()
+            }
+
+//            this@BlockSumoGame.showParticle(
+//                Particle.particle(
+//                    type = ParticleType.BUBBLE,
+//                    data = OffsetAndSpeed(),
+//                    count = 1
+//                ),
+//                Renderer.fixedRectangle(
+//                    player.position.add(player.boundingBox.minX() - expansion, player.boundingBox.minY() - expansion, player.boundingBox.minZ() - expansion).asVec(),
+//                    player.position.add(player.boundingBox.maxX() + expansion, player.boundingBox.maxY() + expansion, player.boundingBox.maxZ() + expansion).asVec()
+//                )
+//            )
+
+            currentIter++
+
+            TaskSchedule.tick(1)
+        }
+
+
+        if (!hasTag(woolSlot)) {
+            runBlocking {
+                launch {
+                    val settings = BlockSumoMain.mongoStorage?.getSettings(uuid)
+                    if (settings != null) {
+                        setTag(woolSlot, settings.woolSlot)
+                        setTag(shearsSlot, settings.shearsSlot)
+                    } else {
+                        setTag(woolSlot, 1)
+                        setTag(shearsSlot, 2)
+                    }
+
+                    scheduleNextTick {
+                        inventory.setItemStack(getTag(woolSlot), ItemStack.builder(color!!.woolMaterial).amount(64).build())
+                        inventory.setItemStack(getTag(shearsSlot), Shears.createItemStack())
+                    }
+                }
+            }
+        } else {
+            inventory.setItemStack(getTag(woolSlot), ItemStack.builder(color!!.woolMaterial).amount(64).build())
+            inventory.setItemStack(getTag(shearsSlot), Shears.createItemStack())
         }
     }
 
@@ -315,7 +546,7 @@ class BlockSumoGame : PvpGame() {
             }
 
             if (player.inventory.getItemInHand(hand).material().name().endsWith("wool", ignoreCase = true)) {
-                player.inventory.setItemInHand(hand, ItemStack.builder(player.color.woolMaterial).amount(64).build())
+                player.inventory.setItemInHand(hand, ItemStack.builder(player.color!!.woolMaterial).amount(64).build())
 
                 if (isNextToBarrier(player.instance!!, blockPosition)) {
                     isCancelled = true
@@ -388,6 +619,8 @@ class BlockSumoGame : PvpGame() {
             if (attacker.gameMode != GameMode.SURVIVAL) return@listenOnly
 
             val entity = target as Player
+
+            if (attacker.color == entity.color) return@listenOnly
 
             if (attacker.spawnProtectionMillis != 0L) {
                 attacker.playSound(Sound.sound(SoundEvent.ENTITY_GENERIC_EXTINGUISH_FIRE, Sound.Source.MASTER, 0.75f, 1f), attacker.position)
@@ -483,7 +716,7 @@ class BlockSumoGame : PvpGame() {
                 if (gameState == GameState.ENDING) return@listenOnly
                 val isOnDiamondBlock =
                     player.instance!!.getBlock(player.position.sub(0.0, 1.0, 0.0)).compare(Block.DIAMOND_BLOCK) ||
-                    player.instance!!.getBlock(player.position.sub(0.0, 2.0, 0.0)).compare(Block.DIAMOND_BLOCK)
+                            player.instance!!.getBlock(player.position.sub(0.0, 1.2, 0.0)).compare(Block.DIAMOND_BLOCK)
 
                 if (diamondBlockPlayer != null) {
                     if (!isOnDiamondBlock && diamondBlockPlayer == player.uuid) {
@@ -517,7 +750,7 @@ class BlockSumoGame : PvpGame() {
                                 Component.text()
                                     .append(Component.text("!", NamedTextColor.RED, TextDecoration.BOLD))
                                     .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
-                                    .append(Component.text(player.username, TextColor.color(player.color.color), TextDecoration.BOLD))
+                                    .append(Component.text(player.username, TextColor.color(player.color!!.color), TextDecoration.BOLD))
                                     .append(Component.text(" is standing on the diamond block!\n", NamedTextColor.GRAY))
                                     .append(Component.text("!", NamedTextColor.RED, TextDecoration.BOLD))
                                     .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
@@ -566,11 +799,34 @@ class BlockSumoGame : PvpGame() {
         }
     }
 
-    override fun gameStarted() {
-        // TODO: Sky border?
+    open fun initPlayerTeam(plr: Player) {
+        plr.color = TeamColor.values().filter { players.none { plr -> plr.color == it } }.random()
+        val newTeam = Team(plr.color!!.name, plr.color!!.color, TeamsPacket.CollisionRule.NEVER)
+        newTeam.add(plr)
+        newTeam.scoreboardTeam.updateSuffix(
+            Component.text().append(Component.text(" - ", NamedTextColor.GRAY))
+                .append(Component.text(plr.lives, NamedTextColor.GREEN, TextDecoration.BOLD)).build()
+        )
 
-        scoreboard?.removeLine("infoLine")
+        plr.displayName = Component.text()
+            .append(Component.text(plr.username, TextColor.color(plr.color!!.color)))
+            .append(Component.text(" - ", NamedTextColor.GRAY))
+            .append(Component.text("5", NamedTextColor.GREEN, TextDecoration.BOLD))
+            .build()
 
+        try {
+            scoreboard?.createLine(
+                Sidebar.ScoreboardLine(
+                    plr.uuid.toString(),
+                    plr.displayName!!,
+                    5
+                )
+            )
+        } catch (e: Exception) {
+        }
+    }
+
+    private fun initTasks() {
         instance!!.scheduler().buildTask {
             val randomEvent = Event.createRandomEvent()
 
@@ -655,7 +911,7 @@ class BlockSumoGame : PvpGame() {
                     .build()
             )
 
-            players.showFirework(
+            getPlayers().showFirework(
                 instance!!, spawnPos.add(0.0, 1.0, 0.0), mutableListOf(
                     FireworkEffect(
                         false,
@@ -687,253 +943,6 @@ class BlockSumoGame : PvpGame() {
 
             playSound(Sound.sound(SoundEvent.ENTITY_ITEM_PICKUP, Sound.Source.PLAYER, 1f, 1f))
         }.delay(TaskSchedule.seconds(5)).repeat(TaskSchedule.seconds(45)).schedule()
-
-        val angleInc = (2 * PI) / players.size
-        players.forEachIndexed { i, plr ->
-            plr.lives = 5
-            plr.respawnPoint = getCircleSpawnPosition(angleInc * i)
-            respawn(plr)
-        }
-    }
-
-    override fun playerDied(player: Player, killer: Entity?) {
-        if (gameState == GameState.ENDING) {
-            player.teleport(spawnPos)
-            return
-        }
-        player.playSound(Sound.sound(SoundEvent.ENTITY_VILLAGER_DEATH, Sound.Source.PLAYER, 1f, 1f), Emitter.self())
-        player.setCanPickupItem(false)
-        player.inventory.clear()
-        player.velocity = Vec(0.0, 40.0, 0.0)
-
-        player.lives--
-
-        var message: Component
-        val victimTitle: Title
-
-        if (killer != null && killer is Player) {
-            killer.kills++
-            updateScoreboard(killer)
-
-            killer.playSound(Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_PLING, Sound.Source.PLAYER, 1f, 1f), Emitter.self())
-
-            message = Component.text()
-                .append(Component.text("☠", NamedTextColor.RED))
-                .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
-                .append(Component.text(player.username, TextColor.color(player.color.color)))
-                .append(Component.text(" was killed by ", NamedTextColor.GRAY))
-                .append(Component.text(killer.username, TextColor.color(killer.color.color)))
-                .build()
-
-            killer.showTitle(
-                Title.title(
-                    Component.empty(),
-                    Component.text()
-                        .append(Component.text("☠ ", NamedTextColor.RED))
-                        .append(Component.text(player.username, NamedTextColor.RED))
-                        .build(),
-                    Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ofMillis(500))
-                )
-            )
-
-            victimTitle = Title.title(
-                Component.text("YOU DIED", NamedTextColor.RED, TextDecoration.BOLD),
-                Component.text()
-                    .append(Component.text("Killed by ", NamedTextColor.GRAY))
-                    .append(Component.text(killer.username, TextColor.color(killer.color.color)))
-                    .build(),
-                Title.Times.times(
-                    Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(1)
-                )
-            )
-
-        } else {
-
-            message = Component.text()
-                .append(Component.text("☠", NamedTextColor.RED))
-                .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
-                .append(Component.text(player.username, TextColor.color(player.color.color)))
-                .append(Component.text(" died", NamedTextColor.GRAY))
-                .build()
-
-
-            victimTitle = Title.title(
-                Component.text("YOU DIED", NamedTextColor.RED, TextDecoration.BOLD),
-                Component.empty(),
-                Title.Times.times(
-                    Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(1)
-                )
-            )
-
-        }
-
-        if (player.lives <= 0) {
-            scoreboard?.removeLine(player.uuid.toString())
-            player.team = null
-
-            message = Component.text()
-                .append(message)
-                .append(Component.text(" FINAL KILL", NamedTextColor.AQUA, TextDecoration.BOLD))
-                .build()
-
-            if (killer != null && killer is Player) {
-                killer.finalKills++
-            }
-
-            val alivePlayers = players.filter { it.lives > 0 && !it.hasTag(GameManager.spectatingTag) }
-            if (alivePlayers.size == 1) victory(alivePlayers.first())
-
-            sendMessage(message)
-            player.showTitle(Title.title(
-                Component.text("YOU DIED", NamedTextColor.RED, TextDecoration.BOLD),
-                Component.text("(Final kill)", NamedTextColor.DARK_GRAY),
-                Title.Times.times(
-                    Duration.ZERO, Duration.ofSeconds(2), Duration.ofSeconds(1)
-                )
-            ))
-
-            return
-        }
-
-        sendMessage(message)
-        player.showTitle(victimTitle)
-
-        updateScoreboard(player)
-
-        var currentIter = 0
-        respawnTasks[player.uuid] = player.scheduler().submitTask {
-            if (currentIter == 0) {
-                currentIter++
-                return@submitTask TaskSchedule.seconds(2)
-            }
-
-            if (currentIter >= 4) {
-                player.respawnPoint = getRandomRespawnPosition()
-                respawn(player)
-                return@submitTask TaskSchedule.stop()
-            }
-            if (currentIter == 1) {
-                if (killer != null && killer is Player) player.spectate(killer)
-            }
-
-            player.playSound(
-                Sound.sound(SoundEvent.BLOCK_METAL_BREAK, Sound.Source.BLOCK, 1f, 2f),
-                Emitter.self()
-            )
-            player.showTitle(
-                Title.title(
-                    Component.text(4 - currentIter, lerp(currentIter / 3f, NamedTextColor.GREEN, NamedTextColor.RED), TextDecoration.BOLD),
-                    Component.empty(),
-                    Title.Times.times(
-                        Duration.ZERO, Duration.ofMillis(800), Duration.ofMillis(200)
-                    )
-                )
-            )
-
-            currentIter++
-            TaskSchedule.seconds(1)
-        }
-
-    }
-
-    override fun respawn(player: Player): Unit = with(player) {
-        reset()
-
-        teleport(respawnPoint).thenRun {
-            gameMode = GameMode.SURVIVAL
-
-            getAttribute(Attribute.MAX_HEALTH).baseValue = lives * 2f
-            player.health = player.maxHealth
-        }
-
-        chestplate = ItemStack.builder(Material.LEATHER_CHESTPLATE).meta(LeatherArmorMeta::class.java) {
-            it.color(Color(color.color))
-        }.build()
-
-        when (username) {
-            "GoldenStack" -> {
-                helmet = ItemStack.of(Material.GOLDEN_HELMET)
-                chestplate = ItemStack.of(Material.GOLDEN_CHESTPLATE)
-                leggings = ItemStack.of(Material.GOLDEN_LEGGINGS)
-                boots = ItemStack.of(Material.GOLDEN_BOOTS)
-            }
-        }
-
-        player.playSound(
-            Sound.sound(SoundEvent.BLOCK_BEACON_ACTIVATE, Sound.Source.MASTER, 1f, 2f),
-            Emitter.self()
-        )
-
-        if (gameState == GameState.ENDING) return
-
-        canBeHit = true
-        spawnProtectionMillis = 4000
-        lastDamageTimestamp = 0
-        setCanPickupItem(true)
-
-        val expansion = 0.15
-        var currentIter = 0
-        spawnProtIndicatorTasks[uuid] = player.scheduler().submitTask {
-            if (currentIter > 80) {
-                player.playSound(Sound.sound(SoundEvent.ENTITY_GENERIC_EXTINGUISH_FIRE, Sound.Source.MASTER, 0.75f, 1f), Sound.Emitter.self())
-                return@submitTask TaskSchedule.stop()
-            }
-
-            this@BlockSumoGame.showParticle(
-                Particle.particle(
-                    type = ParticleType.BUBBLE,
-                    data = OffsetAndSpeed(),
-                    count = 1
-                ),
-                Renderer.fixedRectangle(
-                    player.position.add(player.boundingBox.minX() - expansion, player.boundingBox.minY() - expansion, player.boundingBox.minZ() - expansion).asVec(),
-                    player.position.add(player.boundingBox.maxX() + expansion, player.boundingBox.maxY() + expansion, player.boundingBox.maxZ() + expansion).asVec()
-                )
-            )
-
-            currentIter++
-
-            TaskSchedule.tick(1)
-        }
-
-
-        if (!hasTag(woolSlot)) {
-            runBlocking {
-                launch {
-                    val settings = BlockSumoMain.mongoStorage?.getSettings(uuid)
-                    if (settings != null) {
-                        setTag(woolSlot, settings.woolSlot)
-                        setTag(shearsSlot, settings.shearsSlot)
-                    } else {
-                        setTag(woolSlot, 1)
-                        setTag(shearsSlot, 2)
-                    }
-
-                    scheduleNextTick {
-                        inventory.setItemStack(getTag(woolSlot), ItemStack.builder(color.woolMaterial).amount(64).build())
-                        inventory.setItemStack(getTag(shearsSlot), Shears.createItemStack())
-                    }
-                }
-            }
-        } else {
-            inventory.setItemStack(getTag(woolSlot), ItemStack.builder(color.woolMaterial).amount(64).build())
-            inventory.setItemStack(getTag(shearsSlot), Shears.createItemStack())
-        }
-    }
-
-    override fun gameEnded() {
-        diamondBlockTask?.cancel()
-        respawnTasks.clear()
-        spawnProtIndicatorTasks.clear()
-        blockBreakTasks.clear()
-
-        bobbers.clear()
-        hookedPlayer.clear()
-
-        players.forEach {
-            it.removeTag(loadoutNotificationTag)
-            it.cleanup()
-        }
     }
 
     private fun getCircleSpawnPosition(angle: Double): Pos {
@@ -971,7 +980,7 @@ class BlockSumoGame : PvpGame() {
             val x = cos(actualAngle) * ((borderSize/2) - 6)
             val z = sin(actualAngle) * ((borderSize/2) - 6)
 
-            val distSum = players.filter { !it.hasTag(GameManager.spectatingTag) }.sumOf { it.position.distanceSquared(x, spawnPos.y, z) }
+            val distSum = players.sumOf { it.position.distanceSquared(x, spawnPos.y, z) }
             if (distSum > distanceHighscore) {
                 distanceHighscore = distSum
                 finalX = x
@@ -1015,7 +1024,7 @@ class BlockSumoGame : PvpGame() {
         return false
     }
 
-    fun spawnTnt(position: Pos, fuseTime: Int = 80, explosionSize: Int, explosionForce: Double, explosionForceDistance: Double, breakBlocks: Boolean = true): Entity {
+    fun spawnTnt(position: Pos, fuseTime: Int = 80, explosionSize: Int, explosionForce: Double, explosionForceDistance: Double, breakBlocks: Boolean = true, placer: Player? = null): Entity {
         val tntEntity = Entity(EntityType.TNT)
         val tntMeta = tntEntity.entityMeta as PrimedTntMeta
         tntMeta.fuseTime = fuseTime
@@ -1027,7 +1036,7 @@ class BlockSumoGame : PvpGame() {
         playSound(Sound.sound(SoundEvent.ENTITY_TNT_PRIMED, Sound.Source.BLOCK, 2f, 1f), tntEntity)
 
         tntEntity.scheduler().buildTask {
-            explode(tntEntity.position, explosionSize, explosionForce, explosionForceDistance, breakBlocks, tntEntity)
+            explode(tntEntity.position, explosionSize, explosionForce, explosionForceDistance, breakBlocks, placer, tntEntity)
 
             tntEntity.remove()
         }.delay(Duration.ofMillis(tntMeta.fuseTime * 50L)).schedule()
@@ -1035,10 +1044,10 @@ class BlockSumoGame : PvpGame() {
         return tntEntity
     }
 
-    fun explode(position: Point, explosionSize: Int, explosionForce: Double, explosionForceDistance: Double, breakBlocks: Boolean = true, entity: Entity? = null) {
+    fun explode(position: Point, explosionSize: Int, explosionForce: Double, explosionForceDistance: Double, breakBlocks: Boolean = true, shooter: Player? = null, entity: Entity? = null) {
         try {
             players
-                .filter { it.gameMode == GameMode.SURVIVAL && !it.hasSpawnProtection && !it.hasTag(NoKBCommand.noKbTag) }
+                .filter { it.gameMode == GameMode.SURVIVAL && !it.hasSpawnProtection && !it.hasTag(NoKBCommand.noKbTag) && (it.color != shooter?.color && it.uuid != shooter?.uuid) }
                 .forEach {
                     val distance = it.position.distanceSquared(position)
                     if (distance > explosionForceDistance*explosionForceDistance) return@forEach
@@ -1062,10 +1071,12 @@ class BlockSumoGame : PvpGame() {
                     val blockPos = position.add(it.x(), it.y(), it.z())
                     val block = instance!!.getBlock(blockPos)
 
-                    if (!block.name().contains("WOOL", true) && !block.isAir) return@forEach
+                    if (!block.name().contains("wool") && !block.isAir) return@forEach
 
                     blockBreakTasks[blockPos]?.cancel()
                     blockBreakTasks.remove(blockPos)
+
+                    instance!!.sendBreakBlockEffect(blockPos, block)
 
                     batch.setBlock(blockPos, Block.AIR)
                 }
@@ -1101,7 +1112,7 @@ class BlockSumoGame : PvpGame() {
             )
 
             val spawnPos = Pos(random.nextDouble(-15.0, 15.0), random.nextDouble(50.0, 70.0), random.nextDouble(-15.0, 15.0))
-            players.showFireworkWithDuration(instance!!, spawnPos, 20 + random.nextInt(0, 11), effects)
+            getPlayers().showFireworkWithDuration(instance!!, spawnPos, 20 + random.nextInt(0, 11), effects)
 
             i++
 
@@ -1118,21 +1129,21 @@ class BlockSumoGame : PvpGame() {
         val message = Component.text()
             .append(Component.text(" ${" ".repeat(25)}VICTORY", NamedTextColor.GOLD, TextDecoration.BOLD))
             .append(Component.text("\n\n Winner: ", NamedTextColor.GRAY))
-            .append(Component.text(lastManStanding.username, TextColor.color(lastManStanding.color.color)))
+            .append(Component.text(lastManStanding.username, TextColor.color(lastManStanding.color!!.color)))
             .also {
                 if (highestKiller != null) {
                     it.append(Component.text("\n Highest killer: ", NamedTextColor.GRAY))
-                    it.append(Component.text(highestKiller.username, TextColor.color(highestKiller.color.color)))
+                    it.append(Component.text(highestKiller.username, TextColor.color(highestKiller.color!!.color)))
                 }
             }
             .append(Component.newline())
 
-        players.filter { !it.hasTag(GameManager.spectatingTag) }.sortedBy { it.kills + it.finalKills }.reversed().take(5).forEach { plr ->
+        players.sortedBy { it.kills + it.finalKills }.reversed().take(5).forEach { plr ->
             message.append(
                 Component.text()
                     .append(Component.newline())
                     .append(Component.space())
-                    .append(Component.text(plr.username, TextColor.color(plr.color.color)))
+                    .append(Component.text(plr.username, TextColor.color(plr.color!!.color)))
                     .append(Component.text(" - ", NamedTextColor.DARK_GRAY))
                     .append(Component.text(plr.kills - plr.finalKills, NamedTextColor.WHITE))
                     .also {

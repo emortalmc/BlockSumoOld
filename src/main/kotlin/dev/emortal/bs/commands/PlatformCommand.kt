@@ -10,7 +10,7 @@ import net.minestom.server.instance.block.Block
 
 object PlatformCommand : Command("platform") {
 
-    val wools = arrayOf(
+    private val wools = arrayOf(
         Block.RED_WOOL,
         Block.ORANGE_WOOL,
         Block.YELLOW_WOOL,

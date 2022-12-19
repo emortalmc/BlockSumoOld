@@ -67,7 +67,7 @@ object EnderPearl : Powerup(
                 return@submitTask TaskSchedule.stop()
             }
 
-            val firstCollide = game.players.filter { !it.hasTag(GameManager.spectatingTag) && it != player }.firstOrNull { it.boundingBox.intersectEntity(it.position, pearl) }
+            val firstCollide = game.players.firstOrNull { it.boundingBox.intersectEntity(it.position, pearl) }
             if (firstCollide != null) {
                 lastPos?.let { player.teleport(it.withDirection(player.position.direction())) }
 
