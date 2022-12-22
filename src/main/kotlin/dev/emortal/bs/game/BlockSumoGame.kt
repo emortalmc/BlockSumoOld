@@ -20,6 +20,8 @@ import dev.emortal.immortal.game.GameState
 import dev.emortal.immortal.game.PvpGame
 import dev.emortal.immortal.game.Team
 import dev.emortal.immortal.util.*
+import dev.emortal.tnt.TNTLoader
+import dev.emortal.tnt.source.FileTNTSource
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import net.kyori.adventure.sound.Sound
@@ -31,6 +33,7 @@ import net.kyori.adventure.text.format.TextColor.lerp
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.title.Title
+import net.minestom.server.MinecraftServer
 import net.minestom.server.attribute.Attribute
 import net.minestom.server.color.Color
 import net.minestom.server.coordinate.Point
@@ -49,9 +52,8 @@ import net.minestom.server.event.item.ItemDropEvent
 import net.minestom.server.event.item.PickupItemEvent
 import net.minestom.server.event.player.*
 import net.minestom.server.event.trait.InstanceEvent
-import net.minestom.server.instance.AnvilLoader
-import net.minestom.server.instance.Chunk
 import net.minestom.server.instance.Instance
+import net.minestom.server.instance.InstanceContainer
 import net.minestom.server.instance.batch.AbsoluteBlockBatch
 import net.minestom.server.instance.block.Block
 import net.minestom.server.item.ItemStack
@@ -68,6 +70,7 @@ import net.minestom.server.tag.Tag
 import net.minestom.server.timer.Task
 import net.minestom.server.timer.TaskSchedule
 import net.minestom.server.utils.Direction
+import net.minestom.server.utils.chunk.ChunkUtils
 import net.minestom.server.utils.time.TimeUnit
 import org.tinylog.kotlin.Logger
 import world.cepi.kstom.Manager
@@ -84,6 +87,8 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ThreadLocalRandom
 import java.util.stream.Collectors
+import kotlin.io.path.absolutePathString
+import kotlin.io.path.isDirectory
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
@@ -1164,22 +1169,30 @@ open class BlockSumoGame : PvpGame() {
         //val dimension = Manager.dimensionType.getDimension(NamespaceID.from("fullbright"))!!
         val newInstance = Manager.instance.createInstanceContainer()
 
+
+
         val randomWorld = Files.list(Path.of("./maps/"))
+            .filter { it.isDirectory() }
             .collect(Collectors.toSet())
             .random()
+            .absolutePathString()
 
-        newInstance.chunkLoader = AnvilLoader(randomWorld)
+        val tntLoader = TNTLoader(newInstance, FileTNTSource(Path.of("$randomWorld.tnt")))
+        newInstance.chunkLoader = tntLoader
         newInstance.enableAutoChunkLoad(false)
 
-        val radius = 5
-        val chunkFutures = mutableListOf<CompletableFuture<Chunk>>()
-        for (x in -radius..radius) {
-            for (z in -radius..radius) {
-                chunkFutures.add(newInstance.loadChunk(x, z))
+        tntLoader.chunksMap.keys.forEach {
+            val x = ChunkUtils.getChunkCoordX(it)
+            val z = ChunkUtils.getChunkCoordZ(it)
+            for (xx in -1..1) {
+                for (zz in -1..1) {
+
+                    newInstance.loadChunk(x + xx, z + zz)
+                }
             }
         }
 
-        CompletableFuture.allOf(*chunkFutures.toTypedArray()).thenRun {
+        newInstance.loadChunk(0, 0).thenRun {
             instanceFuture.complete(newInstance)
         }
 

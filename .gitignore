@@ -10,6 +10,9 @@
 # Mobile Tools for Java (J2ME)
 .mtj.tmp/
 
+maps/
+logs/
+
 # Package Files #
 *.jar
 *.war
@@ -24,3 +27,5 @@ hs_err_pid*
 .idea
 .gradle
 build
+config.json
+blocksumo.json

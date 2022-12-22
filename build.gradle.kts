@@ -17,6 +17,7 @@ repositories {
 dependencies {
     implementation("com.github.Minestom:Minestom:d7feed23c8")
     implementation("dev.emortal.immortal:Immortal:3.0.1")
+    implementation("dev.emortal.tnt:TNT:1.0.0")
 
     compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.4.1")
     compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
