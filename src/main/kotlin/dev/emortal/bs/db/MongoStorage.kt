@@ -1,8 +1,11 @@
 package dev.emortal.bs.db
 
+import com.mongodb.ConnectionString
+import com.mongodb.MongoClientSettings
 import com.mongodb.client.model.ReplaceOptions
 import dev.emortal.bs.BlockSumoMain
 import kotlinx.coroutines.runBlocking
+import org.bson.UuidRepresentation
 import org.litote.kmongo.coroutine.CoroutineClient
 import org.litote.kmongo.coroutine.CoroutineCollection
 import org.litote.kmongo.coroutine.CoroutineDatabase
@@ -22,15 +25,21 @@ class MongoStorage {
     }
 
     fun init() {
-        client = KMongo.createClient(BlockSumoMain.databaseConfig.connectionString).coroutine
+        client = KMongo.createClient(
+            MongoClientSettings
+                .builder()
+                .uuidRepresentation(UuidRepresentation.STANDARD)
+                .applyConnectionString(ConnectionString(BlockSumoMain.databaseConfig.connectionString))
+                .build()
+        ).coroutine
         database = client!!.getDatabase("BlockSumo")
 
         playerSettings = database!!.getCollection("playersettings")
     }
 
     suspend fun getSettings(uuid: UUID): PlayerSettings =
-        playerSettings?.findOne(PlayerSettings::uuid eq uuid.toString())
-        ?: PlayerSettings(uuid = uuid.toString())
+        playerSettings?.findOne(PlayerSettings::uuid eq uuid)
+        ?: PlayerSettings(uuid = uuid)
 
     fun saveSettings(uuid: UUID, settings: PlayerSettings) = runBlocking {
         playerSettings?.replaceOne(PlayerSettings::uuid eq settings.uuid, settings, ReplaceOptions().upsert(true))

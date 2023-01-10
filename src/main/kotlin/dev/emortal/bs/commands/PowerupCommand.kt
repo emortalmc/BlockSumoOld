@@ -4,36 +4,32 @@ import dev.emortal.bs.item.Powerup
 import dev.emortal.immortal.luckperms.PermissionUtils.hasLuckPermission
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
+import net.minestom.server.command.builder.Command
 import net.minestom.server.command.builder.arguments.ArgumentType
-import world.cepi.kstom.command.arguments.suggest
-import world.cepi.kstom.command.kommand.Kommand
+import net.minestom.server.command.builder.suggestion.SuggestionEntry
+import net.minestom.server.entity.Player
 
-object PowerupCommand : Kommand({
-    val powerupArg = ArgumentType.StringArray("powerup").suggest {
-        Powerup.registeredMap.keys.toList()
-    }
-    val amountArg = ArgumentType.Integer("amount")
+object PowerupCommand : Command("powerup") {
 
-    syntax(amountArg, powerupArg) {
-        if (player.username != "emortaldev") {
-            player.sendMessage(Component.text("No permission", NamedTextColor.RED))
-            return@syntax
+    init {
+        val powerupArg = ArgumentType.StringArray("powerup").setSuggestionCallback { _, _, suggestion ->
+            Powerup.registeredMap.keys.toList().forEach {
+                suggestion.addEntry(SuggestionEntry(it))
+            }
         }
+        val amountArg = ArgumentType.Integer("amount")
 
-        val powerup = context.get(powerupArg).joinToString(separator = " ")
-        val amount = !amountArg ?: return@syntax
-        player.sendMessage("giving ${amount} many of ${powerup}")
-        val item = Powerup.registeredMap[powerup]?.createItemStack()?.withAmount(amount) ?: return@syntax
-        player.inventory.addItemStack(item)
+        addConditionalSyntax({ sender, _ ->
+            sender.hasLuckPermission("blocksumo.powerup")
+        }, { sender, ctx ->
+            val player = sender as? Player ?: return@addConditionalSyntax
+
+            val powerup = ctx.get(powerupArg).joinToString(separator = " ")
+            val amount = ctx.get(amountArg) ?: return@addConditionalSyntax
+            player.sendMessage("Giving $amount $powerup")
+            val item = Powerup.registeredMap[powerup]?.createItemStack()?.withAmount(amount) ?: return@addConditionalSyntax
+            player.inventory.addItemStack(item)
+        }, amountArg, powerupArg)
     }
 
-    syntax(powerupArg) {
-        if (!player.hasLuckPermission("blocksumo.powerup")) {
-            player.sendMessage(Component.text("No permission", NamedTextColor.RED))
-            return@syntax
-        }
-        val gun = context.get(powerupArg).joinToString(separator = " ")
-        player.itemInMainHand = Powerup.registeredMap[gun]?.createItemStack()!!
-    }
-
-}, "powerup")
+}

@@ -3,16 +3,16 @@ package dev.emortal.bs.item
 import dev.emortal.bs.game.BlockSumoGame
 import dev.emortal.bs.util.RaycastResultType
 import dev.emortal.bs.util.RaycastUtil
+import dev.emortal.immortal.util.asVec
 import net.kyori.adventure.sound.Sound
+import net.kyori.adventure.text.minimessage.MiniMessage
 import net.minestom.server.coordinate.Pos
+import net.minestom.server.coordinate.Vec
 import net.minestom.server.entity.Entity
 import net.minestom.server.entity.GameMode
 import net.minestom.server.entity.Player
 import net.minestom.server.item.Material
 import net.minestom.server.sound.SoundEvent
-import world.cepi.kstom.adventure.asMini
-import world.cepi.kstom.util.asVec
-import world.cepi.kstom.util.eyePosition
 import world.cepi.particle.Particle
 import world.cepi.particle.ParticleType
 import world.cepi.particle.data.OffsetAndSpeed
@@ -20,7 +20,7 @@ import world.cepi.particle.renderer.Renderer
 import world.cepi.particle.showParticle
 
 object Switcheroo : Powerup(
-    "<rainbow>Switcheroo".asMini(),
+    MiniMessage.miniMessage().deserialize("<rainbow>Switcheroo"),
     "switchyboi", // thanks SLL for name :)
     Material.ENDER_EYE,
     Rarity.LEGENDARY,
@@ -36,9 +36,11 @@ object Switcheroo : Powerup(
             player.position
         )
 
+        val eyePos = player.position.add(0.0, player.eyeHeight, 0.0).asVec()
+
         val raycast = RaycastUtil.raycast(
             game,
-            player.eyePosition(),
+            eyePos,
             player.position.direction(),
             60.0,
         ) { it is Player && it.gameMode == GameMode.SURVIVAL && it != player }
@@ -50,8 +52,8 @@ object Switcheroo : Powerup(
                 data = OffsetAndSpeed(),
             ),
             Renderer.fixedLine(
-                player.eyePosition().asVec(),
-                (raycast.hitPosition ?: player.eyePosition().add(player.position.direction().mul(20.0))).asVec()
+                eyePos,
+                raycast.hitPosition?.asVec() ?: eyePos.add(player.position.direction().mul(20.0))
             )
         )
 

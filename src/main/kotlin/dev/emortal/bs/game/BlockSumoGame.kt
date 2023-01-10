@@ -22,8 +22,9 @@ import dev.emortal.immortal.game.Team
 import dev.emortal.immortal.util.*
 import dev.emortal.tnt.TNTLoader
 import dev.emortal.tnt.source.FileTNTSource
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.sound.Sound.Emitter
 import net.kyori.adventure.text.Component
@@ -47,13 +48,14 @@ import net.minestom.server.entity.metadata.other.PrimedTntMeta
 import net.minestom.server.event.EventNode
 import net.minestom.server.event.entity.EntityAttackEvent
 import net.minestom.server.event.entity.EntityDamageEvent
+import net.minestom.server.event.entity.projectile.ProjectileCollideWithBlockEvent
+import net.minestom.server.event.entity.projectile.ProjectileCollideWithEntityEvent
 import net.minestom.server.event.inventory.InventoryPreClickEvent
 import net.minestom.server.event.item.ItemDropEvent
 import net.minestom.server.event.item.PickupItemEvent
 import net.minestom.server.event.player.*
 import net.minestom.server.event.trait.InstanceEvent
 import net.minestom.server.instance.Instance
-import net.minestom.server.instance.InstanceContainer
 import net.minestom.server.instance.batch.AbsoluteBlockBatch
 import net.minestom.server.instance.block.Block
 import net.minestom.server.item.ItemStack
@@ -72,13 +74,8 @@ import net.minestom.server.timer.TaskSchedule
 import net.minestom.server.utils.Direction
 import net.minestom.server.utils.chunk.ChunkUtils
 import net.minestom.server.utils.time.TimeUnit
+import org.json.XMLTokener.entity
 import org.tinylog.kotlin.Logger
-import world.cepi.kstom.Manager
-import world.cepi.kstom.event.listenOnly
-import world.cepi.kstom.util.asPos
-import world.cepi.kstom.util.playSound
-import world.cepi.kstom.util.roundToBlock
-import world.cepi.kstom.util.sendBreakBlockEffect
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -114,9 +111,11 @@ open class BlockSumoGame : PvpGame() {
     private var diamondBlockTask: Task? = null
     private var diamondBlockPlayer: UUID? = null
 
-    val respawnTasks = ConcurrentHashMap<UUID, Task>()
-    val spawnProtIndicatorTasks = ConcurrentHashMap<UUID, Task>()
-    val blockBreakTasks = ConcurrentHashMap<Point, Task>()
+    private val respawnTasks = ConcurrentHashMap<UUID, Task>()
+    private val spawnProtIndicatorTasks = ConcurrentHashMap<UUID, Task>()
+    private val blockBreakTasks = ConcurrentHashMap<Point, Task>()
+
+    private val coroutineScope = CoroutineScope(Dispatchers.IO)
 
     // Grappling hook
     val bobbers = ConcurrentHashMap<UUID, FishingBobber>()
@@ -441,25 +440,12 @@ open class BlockSumoGame : PvpGame() {
         lastDamageTimestamp = 0
         setCanPickupItem(true)
 
-        val expansion = 0.15
         var currentIter = 0
         spawnProtIndicatorTasks[uuid] = player.scheduler().submitTask {
             if (currentIter > 80) {
                 player.playSound(Sound.sound(SoundEvent.ENTITY_GENERIC_EXTINGUISH_FIRE, Sound.Source.MASTER, 0.75f, 1f), Sound.Emitter.self())
                 return@submitTask TaskSchedule.stop()
             }
-
-//            this@BlockSumoGame.showParticle(
-//                Particle.particle(
-//                    type = ParticleType.BUBBLE,
-//                    data = OffsetAndSpeed(),
-//                    count = 1
-//                ),
-//                Renderer.fixedRectangle(
-//                    player.position.add(player.boundingBox.minX() - expansion, player.boundingBox.minY() - expansion, player.boundingBox.minZ() - expansion).asVec(),
-//                    player.position.add(player.boundingBox.maxX() + expansion, player.boundingBox.maxY() + expansion, player.boundingBox.maxZ() + expansion).asVec()
-//                )
-//            )
 
             currentIter++
 
@@ -468,21 +454,19 @@ open class BlockSumoGame : PvpGame() {
 
 
         if (!hasTag(woolSlot)) {
-            runBlocking {
-                launch {
-                    val settings = BlockSumoMain.mongoStorage?.getSettings(uuid)
-                    if (settings != null) {
-                        setTag(woolSlot, settings.woolSlot)
-                        setTag(shearsSlot, settings.shearsSlot)
-                    } else {
-                        setTag(woolSlot, 1)
-                        setTag(shearsSlot, 2)
-                    }
+            coroutineScope.launch {
+                val settings = BlockSumoMain.mongoStorage?.getSettings(uuid)
+                if (settings != null) {
+                    setTag(woolSlot, settings.woolSlot)
+                    setTag(shearsSlot, settings.shearsSlot)
+                } else {
+                    setTag(woolSlot, 1)
+                    setTag(shearsSlot, 2)
+                }
 
-                    scheduleNextTick {
-                        inventory.setItemStack(getTag(woolSlot), ItemStack.builder(color!!.woolMaterial).amount(64).build())
-                        inventory.setItemStack(getTag(shearsSlot), Shears.createItemStack())
-                    }
+                scheduleNextTick {
+                    inventory.setItemStack(getTag(woolSlot), ItemStack.builder(color!!.woolMaterial).amount(64).build())
+                    inventory.setItemStack(getTag(shearsSlot), Shears.createItemStack())
                 }
             }
         } else {
@@ -491,20 +475,20 @@ open class BlockSumoGame : PvpGame() {
         }
     }
 
-    override fun registerEvents(eventNode: EventNode<InstanceEvent>) = with(eventNode) {
-        listenOnly<ItemDropEvent> {
-            isCancelled = true
+    override fun registerEvents(eventNode: EventNode<InstanceEvent>) {
+        eventNode.addListener(ItemDropEvent::class.java) { e ->
+            e.isCancelled = true
         }
 
-        listenOnly<InventoryPreClickEvent> {
-            if ((41..44).contains(slot)) {
-                isCancelled = true
+        eventNode.addListener(InventoryPreClickEvent::class.java) { e ->
+            if ((41..44).contains(e.slot)) {
+                e.isCancelled = true
             }
 
             // TODO: change to current player values
-            if ((clickedItem.material().name().endsWith("wool", ignoreCase = true) || clickedItem.material() == Material.SHEARS) && !player.hasTag(loadoutNotificationTag)) {
-                player.setTag(loadoutNotificationTag, true)
-                player.sendMessage(
+            if ((e.clickedItem.material().name().endsWith("wool", ignoreCase = true) || e.clickedItem.material() == Material.SHEARS) && !e.player.hasTag(loadoutNotificationTag)) {
+                e.player.setTag(loadoutNotificationTag, true)
+                e.player.sendMessage(
                     Component.text()
                         .append(Component.text("We noticed you changed your loudout slot.", NamedTextColor.LIGHT_PURPLE))
                         .append(Component.text(" Use the command ", NamedTextColor.GRAY))
@@ -514,73 +498,75 @@ open class BlockSumoGame : PvpGame() {
             }
         }
 
-        listenOnly<PlayerBlockPlaceEvent> {
-            consumeBlock(false)
+        eventNode.addListener(PlayerBlockPlaceEvent::class.java) { e ->
+            e.consumeBlock(false)
 
-            if (blockPosition.distanceSquared(player.position.add(0.0, 1.0, 0.0)) > 5*5) {
-                isCancelled = true
-                return@listenOnly
+            if (e.blockPosition.distanceSquared(e.player.position.add(0.0, 1.0, 0.0)) > 5*5) {
+                e.isCancelled = true
+                return@addListener
             }
 
-            if (blockPosition.y() > 77 || blockPosition.y() < 51.5) {
-                isCancelled = true
-                return@listenOnly
+            if (e.blockPosition.y() > 77 || e.blockPosition.y() < 51.5) {
+                e.isCancelled = true
+                return@addListener
             }
 
-            val heldItem = player.getHeldPowerup(hand)
+            val heldItem = e.player.getHeldPowerup(e.hand)
             if (heldItem?.interactType == PowerupInteractType.PLACE || heldItem?.interactType == PowerupInteractType.USE) {
-                isCancelled = true
-                heldItem.use(this@BlockSumoGame, player, hand, blockPosition.add(0.5, 0.1, 0.5).asPos())
-                return@listenOnly
+                e.isCancelled = true
+                heldItem.use(this@BlockSumoGame, e.player, e.hand, Pos(e.blockPosition.add(0.5, 0.1, 0.5)))
+                return@addListener
             }
 
-            if (blockPosition.distanceSquared(spawnPos.sub(0.5, 0.0, 0.5)) < 3*3 && blockPosition.blockY() > (spawnPos.blockY() - 1)) {
-                blockBreakTasks[blockPosition] = instance.scheduler().buildTask {
-                    instance.setBlock(blockPosition, Block.AIR)
+            if (e.blockPosition.distanceSquared(spawnPos.sub(0.5, 0.0, 0.5)) < 3*3 && e.blockPosition.blockY() > (spawnPos.blockY() - 1)) {
+                blockBreakTasks[e.blockPosition] = e.instance.scheduler().buildTask {
+                    e.instance.setBlock(e.blockPosition, Block.AIR)
                     // Send the block break effect packet
                     sendGroupedPacket(
                         EffectPacket(
                             2001,
-                            blockPosition,
-                            block.stateId().toInt(),
+                            e.blockPosition,
+                            e.block.stateId().toInt(),
                             false
                         )
                     )
                 }.delay(TaskSchedule.seconds(5)).schedule()
             }
 
-            if (player.inventory.getItemInHand(hand).material().name().endsWith("wool", ignoreCase = true)) {
-                player.inventory.setItemInHand(hand, ItemStack.builder(player.color!!.woolMaterial).amount(64).build())
+            if (e.player.inventory.getItemInHand(e.hand).material().name().endsWith("wool", ignoreCase = true)) {
+                e.player.inventory.setItemInHand(e.hand, ItemStack.builder(e.player.color!!.woolMaterial).amount(64).build())
 
-                if (isNextToBarrier(player.instance!!, blockPosition)) {
-                    isCancelled = true
-                    player.teleport(player.position.sub(0.0, 1.0, 0.0))
-                    player.velocity = Vec(0.0, -20.0, 0.0)
-                    return@listenOnly
+                if (isNextToBarrier(e.player.instance!!, e.blockPosition)) {
+                    e.isCancelled = true
+                    e.player.teleport(e.player.position.sub(0.0, 1.0, 0.0))
+                    e.player.velocity = Vec(0.0, -20.0, 0.0)
+                    return@addListener
                 }
 
-                return@listenOnly
+                return@addListener
             }
         }
 
-        listenOnly<PlayerBlockBreakEvent> {
-            blockBreakTasks[blockPosition]?.cancel()
-            blockBreakTasks.remove(blockPosition)
-            if (!block.name().contains("wool", true)) {
-                isCancelled = true
+        eventNode.addListener(PlayerBlockBreakEvent::class.java) { e ->
+            blockBreakTasks[e.blockPosition]?.cancel()
+            blockBreakTasks.remove(e.blockPosition)
+            if (!e.block.name().contains("wool", true)) {
+                e.isCancelled = true
             }
         }
 
-        listenOnly<PlayerUseItemEvent> {
-            isCancelled = true
-            val heldItem = player.getHeldPowerup(hand) ?: return@listenOnly
+        eventNode.addListener(PlayerUseItemEvent::class.java) { e ->
+            val player = e.player
+
+            e.isCancelled = true
+            val heldItem = player.getHeldPowerup(e.hand) ?: return@addListener
 
             if (heldItem.id == "grapplehook") {
-                isCancelled = false
+                e.isCancelled = false
 
                 if (bobbers.containsKey(player.uuid)) {
-                    bobbers[player.uuid]?.retract(hand)
-                    return@listenOnly
+                    bobbers[player.uuid]?.retract(e.hand)
+                    return@addListener
                 }
 
                 val zDir = cos(Math.toRadians((-player.position.yaw).toDouble()) - Math.PI)
@@ -591,40 +577,40 @@ open class BlockSumoGame : PvpGame() {
 
                 val bobberEntity = FishingBobber(player, this@BlockSumoGame)
                 bobberEntity.setInstance(player.instance!!, Pos(x, y, z))
-                bobberEntity.throwBobber(hand)
+                bobberEntity.throwBobber(e.hand)
 
-                return@listenOnly
+                return@addListener
             }
 
-            if (heldItem.interactType != PowerupInteractType.USE && heldItem.interactType != PowerupInteractType.FIREBALL_FIX) return@listenOnly
+            if (heldItem.interactType != PowerupInteractType.USE && heldItem.interactType != PowerupInteractType.FIREBALL_FIX) return@addListener
 
-            heldItem.use(this@BlockSumoGame, player, hand, null)
+            heldItem.use(this@BlockSumoGame, player, e.hand, null)
         }
 
-        listenOnly<PlayerUseItemOnBlockEvent> {
-            //if (!player.inventory.itemInMainHand.meta.hasTag(Item.itemIdTag)) return@listenOnly
+        eventNode.addListener(PlayerUseItemOnBlockEvent::class.java) { e ->
+            //if (!player.inventory.itemInMainHand.meta.hasTag(Item.itemIdTag)) return@addListener
 
-            val heldItem = player.getHeldPowerup(hand) ?: return@listenOnly
-            if (heldItem.interactType != PowerupInteractType.USE) return@listenOnly
+            val heldItem = e.player.getHeldPowerup(e.hand) ?: return@addListener
+            if (heldItem.interactType != PowerupInteractType.USE) return@addListener
 
-            heldItem.use(this@BlockSumoGame, player, hand, null)
+            heldItem.use(this@BlockSumoGame, e.player, e.hand, null)
         }
 
-        listenOnly<EntityAttackEvent> {
-            if (target.entityType == EntityType.FIREBALL) {
-                target.velocity = entity.position.direction().normalize().mul(20.0)
+        eventNode.addListener(EntityAttackEvent::class.java) { e ->
+            if (e.target.entityType == EntityType.FIREBALL) {
+                e.target.velocity = e.entity.position.direction().normalize().mul(20.0)
             }
 
-            if (entity !is Player) return@listenOnly
-            if (target !is Player) return@listenOnly
+            if (e.entity !is Player) return@addListener
+            if (e.target !is Player) return@addListener
 
-            val attacker = entity as Player
+            val attacker = e.entity as Player
 
-            if (attacker.gameMode != GameMode.SURVIVAL) return@listenOnly
+            if (attacker.gameMode != GameMode.SURVIVAL) return@addListener
 
-            val entity = target as Player
+            val entity = e.target as Player
 
-            if (attacker.color == entity.color) return@listenOnly
+            if (attacker.color == entity.color) return@addListener
 
             if (attacker.spawnProtectionMillis != 0L) {
                 attacker.playSound(Sound.sound(SoundEvent.ENTITY_GENERIC_EXTINGUISH_FIRE, Sound.Source.MASTER, 0.75f, 1f), attacker.position)
@@ -635,10 +621,10 @@ open class BlockSumoGame : PvpGame() {
             if (entity.hasSpawnProtection) {
                 attacker.playSound(Sound.sound(SoundEvent.BLOCK_WOOD_BREAK, Sound.Source.MASTER, 0.75f, 1.5f), entity.position)
                 entity.playSound(Sound.sound(SoundEvent.BLOCK_WOOD_BREAK, Sound.Source.MASTER, 0.75f, 1.5f), attacker.position)
-                return@listenOnly
+                return@addListener
             }
-            if (!entity.canBeHit) return@listenOnly
-            if (attacker.getDistanceSquared(target) > 4.5*4.5) return@listenOnly
+            if (!entity.canBeHit) return@addListener
+            if (attacker.getDistanceSquared(entity) > 4.5*4.5) return@addListener
             entity.canBeHit = false
 
             entity.damage(DamageType.fromPlayer(attacker), 0f)
@@ -646,7 +632,7 @@ open class BlockSumoGame : PvpGame() {
 
             val heldItem = attacker.getHeldPowerup(Player.Hand.MAIN)
             if (heldItem != null && heldItem.interactType == PowerupInteractType.ATTACK) {
-                heldItem.use(this@BlockSumoGame, attacker, Player.Hand.MAIN, null, target)
+                heldItem.use(this@BlockSumoGame, attacker, Player.Hand.MAIN, null, entity)
             }
 
             entity.scheduler().buildTask {
@@ -654,17 +640,17 @@ open class BlockSumoGame : PvpGame() {
             }.delay(TaskSchedule.tick(10)).schedule()
         }
 
-        listenOnly<EntityDamageEvent> {
-            val player = entity as? Player ?: return@listenOnly
+        eventNode.addListener(EntityDamageEvent::class.java) { e ->
+            val player = e.entity as? Player ?: return@addListener
 
             player.lastDamageTimestamp = System.currentTimeMillis()
         }
 
-        listenOnly<PickupItemEvent> {
-            val player = entity as? Player ?: return@listenOnly
+        eventNode.addListener(PickupItemEvent::class.java) { e ->
+            val player = e.entity as? Player ?: return@addListener
 
-            if (player.gameMode != GameMode.SURVIVAL) return@listenOnly
-            isCancelled = !player.inventory.addItemStack(itemEntity.itemStack)
+            if (player.gameMode != GameMode.SURVIVAL) return@addListener
+            e.isCancelled = !player.inventory.addItemStack(e.itemEntity.itemStack)
             /*if (!isCancelled) {
                 player.playSound(
                     Sound.sound(
@@ -677,14 +663,12 @@ open class BlockSumoGame : PvpGame() {
             }*/
         }
 
-        listenOnly<PlayerBlockInteractEvent> {
-            this.blockPosition
-        }
+        eventNode.addListener(PlayerTickEvent::class.java) { e ->
+            val player = e.player
 
-        listenOnly<PlayerTickEvent> {
             if (player.gameMode != GameMode.SURVIVAL || gameState == GameState.ENDING) {
                 if (player.position.y() < -64) player.teleport(spawnPos)
-                return@listenOnly
+                return@addListener
             }
 
             var killer: Entity? = null
@@ -717,7 +701,7 @@ open class BlockSumoGame : PvpGame() {
             }
 
             if (player.gameMode == GameMode.SURVIVAL) {
-                if (gameState == GameState.ENDING) return@listenOnly
+                if (gameState == GameState.ENDING) return@addListener
                 val isOnDiamondBlock =
                     player.instance!!.getBlock(player.position.sub(0.0, 1.0, 0.0)).compare(Block.DIAMOND_BLOCK) ||
                             player.instance!!.getBlock(player.position.sub(0.0, 1.2, 0.0)).compare(Block.DIAMOND_BLOCK)
@@ -729,14 +713,14 @@ open class BlockSumoGame : PvpGame() {
                         diamondBlockPlayer = null
                     }
 
-                    return@listenOnly
+                    return@addListener
                 }
 
                 if (isOnDiamondBlock) {
                     diamondBlockPlayer = player.uuid
 
                     var currentIter = 0
-                    diamondBlockTask = instance.scheduler().submitTask {
+                    diamondBlockTask = e.instance.scheduler().submitTask {
                         val seconds = diamondBlockTime - currentIter
 
                         if (seconds <= 0) {
@@ -800,6 +784,54 @@ open class BlockSumoGame : PvpGame() {
                     }
                 }
             }
+        }
+
+        eventNode.addListener(ProjectileCollideWithBlockEvent::class.java) { e ->
+            val powerup = e.entity.getTag(Item.itemIdTag)
+            val shooter = (e.entity as? EntityProjectile ?: return@addListener).shooter as? Player ?: return@addListener
+
+            when (powerup) {
+                "enderpearl" -> shooter.teleport(e.collisionPosition)
+                "grapplehook" -> return@addListener
+            }
+
+            e.entity.remove()
+        }
+        eventNode.addListener(ProjectileCollideWithEntityEvent::class.java) { e ->
+            val powerup = e.entity.getTag(Item.itemIdTag)
+
+            val shooter = (e.entity as? EntityProjectile ?: return@addListener).shooter as? Player ?: return@addListener
+            val target = e.target as? Player ?: return@addListener
+
+            if (target.hasSpawnProtection) {
+                shooter.playSound(Sound.sound(SoundEvent.BLOCK_WOOD_BREAK, Sound.Source.MASTER, 0.75f, 1.5f), Emitter.self())
+                target.playSound(Sound.sound(SoundEvent.BLOCK_WOOD_BREAK, Sound.Source.MASTER, 0.75f, 1.5f), Emitter.self())
+                return@addListener
+            }
+            if (!target.canBeHit) return@addListener
+
+            target.canBeHit = false
+            target.scheduler().buildTask {
+                target.canBeHit = true
+            }.delay(TaskSchedule.tick(10)).schedule()
+
+            target.damage(DamageType.fromPlayer(shooter), 0f)
+
+            when (powerup) {
+                "snowball" -> target.takeKnockback(e.collisionPosition)
+                "slimeball" -> target.takeKnockback(e.collisionPosition, -0.8)
+                "enderpearl" -> shooter.teleport(e.collisionPosition)
+                "grapplehook" -> {
+                    val entity = e.entity as FishingBobber
+                    if (entity.hookedEntity == null) {
+                        entity.hookedEntity = target
+                        hookedPlayer[shooter.uuid] = target
+                    }
+                    return@addListener // we don't want the bobber to be removed
+                }
+            }
+
+            e.entity.remove()
         }
     }
 
@@ -888,7 +920,7 @@ open class BlockSumoGame : PvpGame() {
                 )
             }
 
-            borderSize = lerp(7f, originalBorderSize.toFloat(), 1-((System.currentTimeMillis() - startTimestamp).toFloat() / timeToSmall.toFloat())).toDouble()
+            borderSize = lerp(10f, originalBorderSize.toFloat(), 1-((System.currentTimeMillis() - startTimestamp).toFloat() / timeToSmall.toFloat())).toDouble()
         }.delay(TaskSchedule.minutes(3)).repeat(TaskSchedule.seconds(5)).schedule()
 
         // Item loop task
@@ -953,7 +985,7 @@ open class BlockSumoGame : PvpGame() {
         val x = cos(angle) * ((borderSize/2) - 6)
         val z = sin(angle) * ((borderSize/2) - 6)
 
-        var pos = spawnPos.add(x, -1.0, z).roundToBlock().add(0.5, 0.0, 0.5)
+        var pos = Pos(spawnPos.add(x, -1.0, z).roundToBlock().add(0.5, 0.0, 0.5))
         val angle1 = spawnPos.sub(pos.x(), pos.y(), pos.z())
 
         pos = pos.withDirection(angle1).withPitch(0f)
@@ -973,16 +1005,16 @@ open class BlockSumoGame : PvpGame() {
     }
 
     private fun getRandomRespawnPosition(): Pos {
-        val angleOffset = ThreadLocalRandom.current().nextDouble(2 * PI)
+        val randomOffset = ThreadLocalRandom.current().nextDouble(2 * PI)
 
         // Finds a spawn position as far away from other players as possible
         var distanceHighscore = Double.MIN_VALUE
         var finalX = 0.0
         var finalZ = 0.0
         for (angle in 0..360 step 6) {
-            val actualAngle = (angle * PI / 180) + angleOffset
-            val x = cos(actualAngle) * ((borderSize/2) - 6)
-            val z = sin(actualAngle) * ((borderSize/2) - 6)
+            val radians = (angle * PI / 180) + randomOffset
+            val x = cos(radians) * ((borderSize/2) - 6)
+            val z = sin(radians) * ((borderSize/2) - 6)
 
             val distSum = players.sumOf { it.position.distanceSquared(x, spawnPos.y, z) }
             if (distSum > distanceHighscore) {
@@ -992,7 +1024,7 @@ open class BlockSumoGame : PvpGame() {
             }
         }
 
-        var pos = spawnPos.add(finalX, -1.0, finalZ).roundToBlock().add(0.5, 0.0, 0.5)
+        var pos = Pos(spawnPos.add(finalX, -1.0, finalZ).roundToBlock().add(0.5, 0.0, 0.5))
         val angle1 = spawnPos.sub(pos.x(), pos.y(), pos.z())
 
         pos = pos.withDirection(angle1).withPitch(0f)
@@ -1051,7 +1083,14 @@ open class BlockSumoGame : PvpGame() {
     fun explode(position: Point, explosionSize: Int, explosionForce: Double, explosionForceDistance: Double, breakBlocks: Boolean = true, shooter: Player? = null, entity: Entity? = null) {
         try {
             players
-                .filter { it.gameMode == GameMode.SURVIVAL && !it.hasSpawnProtection && !it.hasTag(NoKBCommand.noKbTag) && (it.color != shooter?.color && it.uuid != shooter?.uuid) }
+                .filter { it.gameMode == GameMode.SURVIVAL  }
+                .filter {
+                    if (it.uuid != shooter?.uuid) {
+                        !it.hasSpawnProtection && it.color != shooter?.color && !it.hasTag(NoKBCommand.noKbTag)
+                    } else {
+                        true
+                    }
+                }
                 .forEach {
                     val distance = it.position.distanceSquared(position)
                     if (distance > explosionForceDistance*explosionForceDistance) return@forEach
@@ -1167,9 +1206,7 @@ open class BlockSumoGame : PvpGame() {
         val instanceFuture = CompletableFuture<Instance>()
 
         //val dimension = Manager.dimensionType.getDimension(NamespaceID.from("fullbright"))!!
-        val newInstance = Manager.instance.createInstanceContainer()
-
-
+        val newInstance = MinecraftServer.getInstanceManager().createInstanceContainer()
 
         val randomWorld = Files.list(Path.of("./maps/"))
             .filter { it.isDirectory() }
@@ -1177,9 +1214,16 @@ open class BlockSumoGame : PvpGame() {
             .random()
             .absolutePathString()
 
-        val tntLoader = TNTLoader(newInstance, FileTNTSource(Path.of("$randomWorld.tnt")))
+        if (randomWorld.endsWith("end")) {
+            newInstance.time = 18000
+            newInstance.timeRate = 0
+            newInstance.timeUpdate = null
+        }
+
+        val tntLoader = TNTLoader(FileTNTSource(Path.of("$randomWorld.tnt")))
         newInstance.chunkLoader = tntLoader
         newInstance.enableAutoChunkLoad(false)
+        newInstance.setTag(Tag.Boolean("doNotAutoUnloadChunk"), true)
 
         tntLoader.chunksMap.keys.forEach {
             val x = ChunkUtils.getChunkCoordX(it)
@@ -1187,7 +1231,9 @@ open class BlockSumoGame : PvpGame() {
             for (xx in -1..1) {
                 for (zz in -1..1) {
 
-                    newInstance.loadChunk(x + xx, z + zz)
+                    newInstance.loadChunk(x + xx, z + zz).thenAccept {
+                        it.sendChunk()
+                    }
                 }
             }
         }

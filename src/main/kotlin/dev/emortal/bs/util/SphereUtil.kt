@@ -22,12 +22,4 @@ object SphereUtil {
         return list
     }
 
-    fun airBatch(radius: Int): RelativeBlockBatch {
-        val batch = RelativeBlockBatch()
-
-        getBlocksInSphere(radius).forEach { batch.setBlock(it, Block.AIR) }
-
-        return batch
-    }
-
 }

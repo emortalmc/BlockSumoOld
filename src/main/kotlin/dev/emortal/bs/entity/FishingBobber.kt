@@ -8,6 +8,7 @@ import dev.emortal.bs.util.RaycastResultType
 import dev.emortal.bs.util.RaycastUtil
 import net.minestom.server.coordinate.Vec
 import net.minestom.server.entity.Entity
+import net.minestom.server.entity.EntityProjectile
 import net.minestom.server.entity.EntityType
 import net.minestom.server.entity.GameMode
 import net.minestom.server.entity.Player
@@ -22,7 +23,7 @@ import kotlin.math.sin
 // Thanks to
 // https://github.com/Bloepiloepi/MinestomPvP/blob/master/src/main/java/io/github/bloepiloepi/pvp/projectile/FishingBobber.java
 
-class FishingBobber(val shooter: Player, val game: BlockSumoGame) : Entity(EntityType.FISHING_BOBBER) {
+class FishingBobber(val shooter: Player, val game: BlockSumoGame) : EntityProjectile(shooter, EntityType.FISHING_BOBBER) {
 
     var hookedEntity: Player? = null
         set(value) {
@@ -41,6 +42,8 @@ class FishingBobber(val shooter: Player, val game: BlockSumoGame) : Entity(Entit
         ownerEntity = shooter
     }
 
+
+
     override fun update(time: Long) {
         if (shouldStopFishing(shooter)) {
             remove()
@@ -49,25 +52,6 @@ class FishingBobber(val shooter: Player, val game: BlockSumoGame) : Entity(Entit
             game.bobbers.remove(shooter.uuid)
             game.hookedPlayer.remove(shooter.uuid)
             return
-        }
-
-        val raycast = RaycastUtil.raycast(game, position, velocity.normalize(), maxDistance = velocity.div(6.0).length()) {
-            (it != shooter)
-        }
-
-        when (raycast.resultType) {
-            RaycastResultType.HIT_ENTITY -> {
-                if (hookedEntity == null) {
-                    val hitPlayer = raycast.hitEntity as? Player ?: return
-                    hookedEntity = hitPlayer
-                    game.hookedPlayer[shooter.uuid] = hitPlayer
-                    if (hitPlayer.canBeHit && !hitPlayer.hasSpawnProtection)  {
-                        hitPlayer.damage(DamageType.fromPlayer(shooter), 0f)
-                    }
-                }
-            }
-
-            else -> {}
         }
 
     }

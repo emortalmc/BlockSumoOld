@@ -7,37 +7,40 @@ import dev.emortal.immortal.game.GameManager.game
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
+import net.minestom.server.command.builder.Command
+import net.minestom.server.entity.Player
 import net.minestom.server.item.Material
 import net.minestom.server.sound.SoundEvent
-import world.cepi.kstom.command.kommand.Kommand
 
-object SaveLoudoutCommand : Kommand({
-    onlyPlayers()
+object SaveLoudoutCommand : Command("saveloadout") {
+    init {
+        setDefaultExecutor { sender, _ ->
+            val player = sender as? Player ?: return@setDefaultExecutor
 
-    default {
-        if (player.game == null) {
-            player.sendMessage(Component.text("You're not in a game", NamedTextColor.RED))
-            return@default
+            if (player.game == null) {
+                player.sendMessage(Component.text("You're not in a game", NamedTextColor.RED))
+                return@setDefaultExecutor
+            }
+
+            var woolSlot: Int? = null
+            var shearSlot: Int? = null
+
+            player.inventory.itemStacks.forEachIndexed { i, it ->
+                if (it.material().name().endsWith("wool", true)) woolSlot = i
+                if (it.material() == Material.SHEARS) shearSlot = i
+            }
+
+            if (woolSlot == null || shearSlot == null) {
+                player.sendMessage(Component.text("Couldn't find your items. (are you dead?)", NamedTextColor.RED))
+                return@setDefaultExecutor
+            }
+
+            BlockSumoMain.mongoStorage?.saveSettings(player.uuid, PlayerSettings(player.uuid, woolSlot!!, shearSlot!!))
+            player.setTag(BlockSumoGame.woolSlot, woolSlot)
+            player.setTag(BlockSumoGame.shearsSlot, shearSlot)
+
+            player.sendMessage(Component.text("Your loudout has been saved!", NamedTextColor.GREEN))
+            player.playSound(Sound.sound(SoundEvent.ENTITY_VILLAGER_CELEBRATE, Sound.Source.MASTER, 0.6f, 1.5f))
         }
-
-        var woolSlot: Int? = null
-        var shearSlot: Int? = null
-
-        player.inventory.itemStacks.forEachIndexed { i, it ->
-            if (it.material().name().endsWith("wool", true)) woolSlot = i
-            if (it.material() == Material.SHEARS) shearSlot = i
-        }
-
-        if (woolSlot == null || shearSlot == null) {
-            player.sendMessage(Component.text("Couldn't find your items. (are you dead?)", NamedTextColor.RED))
-            return@default
-        }
-
-        BlockSumoMain.mongoStorage?.saveSettings(player.uuid, PlayerSettings(player.uuid.toString(), woolSlot!!, shearSlot!!))
-        player.setTag(BlockSumoGame.woolSlot, woolSlot)
-        player.setTag(BlockSumoGame.shearsSlot, shearSlot)
-
-        player.sendMessage(Component.text("Your loudout has been saved!", NamedTextColor.GREEN))
-        player.playSound(Sound.sound(SoundEvent.ENTITY_VILLAGER_CELEBRATE, Sound.Source.MASTER, 0.6f, 1.5f))
     }
-}, "saveloudout")
+}

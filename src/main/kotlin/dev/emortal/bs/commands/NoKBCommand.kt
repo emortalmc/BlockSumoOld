@@ -12,13 +12,12 @@ object NoKBCommand : Command("nokb") {
     val noKbTag = Tag.Boolean("noKb")
 
     init {
-        setDefaultExecutor { sender, context ->
-            val player = sender as? Player ?: return@setDefaultExecutor
+        setCondition { sender, _ ->
+            sender.hasLuckPermission("blocksumo.nokb")
+        }
 
-            if (!player.hasLuckPermission("blocksumo.nokb")) {
-                player.sendMessage(Component.text("No permission", NamedTextColor.RED))
-                return@setDefaultExecutor
-            }
+        setDefaultExecutor { sender, _ ->
+            val player = sender as? Player ?: return@setDefaultExecutor
 
             if (player.hasTag(noKbTag)) {
                 player.removeTag(noKbTag)

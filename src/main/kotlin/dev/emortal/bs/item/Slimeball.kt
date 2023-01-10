@@ -5,8 +5,11 @@ import dev.emortal.bs.game.BlockSumoPlayerHelper.canBeHit
 import dev.emortal.bs.game.BlockSumoPlayerHelper.hasSpawnProtection
 import dev.emortal.bs.util.RaycastResultType
 import dev.emortal.bs.util.RaycastUtil
+import dev.emortal.immortal.util.playSound
 import dev.emortal.immortal.util.takeKnockback
 import net.kyori.adventure.sound.Sound
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.NamedTextColor
 import net.minestom.server.MinecraftServer
 import net.minestom.server.coordinate.Pos
 import net.minestom.server.entity.Entity
@@ -19,11 +22,10 @@ import net.minestom.server.item.ItemStack
 import net.minestom.server.item.Material
 import net.minestom.server.sound.SoundEvent
 import net.minestom.server.timer.TaskSchedule
-import world.cepi.kstom.adventure.asMini
-import world.cepi.kstom.util.playSound
+import net.minestom.server.utils.time.TimeUnit
 
 object Slimeball : Powerup(
-    "<green>Slimeball".asMini(),
+    Component.text("Slimeball", NamedTextColor.GREEN),
     "slimeball",
     Material.SLIME_BALL,
     Rarity.COMMON,
@@ -46,65 +48,11 @@ object Slimeball : Powerup(
 
         val instance = player.instance!!
 
-        snowball.setInstance(instance, player.position.add(0.0, 1.0, 0.0)).thenRun {
-            var lastPos = snowball.position
-            snowball.scheduler().submitTask {
-                if (snowball.aliveTicks > 10 * MinecraftServer.TICK_PER_SECOND) {
-                    snowball.remove()
-                    return@submitTask TaskSchedule.stop()
-                }
-
-                if (snowball.velocity.x == 0.0 || snowball.velocity.z == 0.0) {
-                    collide(game, snowball)
-                    return@submitTask TaskSchedule.stop()
-                }
-
-                val dist = lastPos.distanceSquared(snowball.position)
-
-                val raycast = RaycastUtil.raycastSquared(game, snowball.position, snowball.velocity.normalize(), maxDistanceSquared = dist) {
-                    (it != player) && it is Player
-                }
-
-                when (raycast.resultType) {
-                    RaycastResultType.HIT_BLOCK -> {
-                        collide(game, snowball)
-                        return@submitTask TaskSchedule.stop()
-                    }
-
-                    RaycastResultType.HIT_ENTITY -> {
-                        val entity = raycast.hitEntity!! as Player
-
-                        collide(game, snowball)
-
-                        if (entity.hasSpawnProtection) {
-                            player.playSound(Sound.sound(SoundEvent.BLOCK_WOOD_BREAK, Sound.Source.MASTER, 0.75f, 1.5f), entity.position)
-                            entity.playSound(Sound.sound(SoundEvent.BLOCK_WOOD_BREAK, Sound.Source.MASTER, 0.75f, 1.5f), player.position)
-                            return@submitTask TaskSchedule.stop()
-                        }
-                        if (!entity.canBeHit) return@submitTask TaskSchedule.stop()
-
-                        entity.canBeHit = false
-                        entity.scheduler().buildTask {
-                            entity.canBeHit = true
-                        }.delay(TaskSchedule.tick(10)).schedule()
-
-                        entity.damage(DamageType.fromPlayer(player), 0f)
-                        entity.takeKnockback(lastPos, -0.8)
-
-                        return@submitTask TaskSchedule.stop()
-                    }
-
-                    else -> {}
-                }
-
-                lastPos = snowball.position
-
-                TaskSchedule.nextTick()
-            }
-        }
+        snowball.scheduleRemove(10, TimeUnit.SECOND)
+        snowball.setInstance(instance, player.position.add(0.0, 1.0, 0.0))
 
         instance.playSound(
-            Sound.sound(SoundEvent.ENTITY_ENDER_PEARL_THROW, Sound.Source.BLOCK, 1f, 1f),
+            Sound.sound(SoundEvent.ENTITY_SNOWBALL_THROW, Sound.Source.BLOCK, 1f, 1f),
             player.position
         )
     }

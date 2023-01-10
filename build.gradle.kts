@@ -15,7 +15,7 @@ repositories {
 }
 
 dependencies {
-    implementation("com.github.Minestom:Minestom:d7feed23c8")
+    implementation("com.github.Minestom:Minestom:eb06ba8664")
     implementation("dev.emortal.immortal:Immortal:3.0.1")
     implementation("dev.emortal.tnt:TNT:1.0.0")
 

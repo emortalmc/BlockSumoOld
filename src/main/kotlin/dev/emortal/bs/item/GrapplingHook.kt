@@ -1,17 +1,17 @@
 package dev.emortal.bs.item
 
 import dev.emortal.bs.game.BlockSumoGame
+import dev.emortal.immortal.util.playSound
 import net.kyori.adventure.sound.Sound
+import net.kyori.adventure.text.minimessage.MiniMessage
 import net.minestom.server.coordinate.Pos
 import net.minestom.server.entity.Entity
 import net.minestom.server.entity.Player
 import net.minestom.server.item.Material
 import net.minestom.server.sound.SoundEvent
-import world.cepi.kstom.adventure.asMini
-import world.cepi.kstom.util.playSound
 
 object GrapplingHook : Powerup(
-    "<gold>Grappling Hook".asMini(),
+    MiniMessage.miniMessage().deserialize("<gold>Grappling Hook"),
     "grapplehook",
     Material.FISHING_ROD,
     Rarity.RARE,

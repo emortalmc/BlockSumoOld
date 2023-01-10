@@ -11,8 +11,9 @@ import dev.emortal.immortal.game.GameManager
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
+import net.kyori.adventure.text.minimessage.MiniMessage
+import net.minestom.server.MinecraftServer
 import org.tinylog.kotlin.Logger
-import world.cepi.kstom.command.register
 import java.nio.file.Path
 
 fun main() {
@@ -28,23 +29,26 @@ fun main() {
         BlockSumoMain.mongoStorage?.init()
     }
 
+    val miniMessage = MiniMessage.miniMessage()
+
     GameManager.registerGame<BlockSumoGame>(
         "blocksumo",
-        Component.text("Block Sumo", NamedTextColor.YELLOW, TextDecoration.BOLD),
+        miniMessage.deserialize("<gradient:blue:aqua><bold>Block Sumo"),
         showsInSlashPlay = true
     )
     GameManager.registerGame<TeamBlockSumoGame>(
         "teamblocksumo",
-        Component.text("Block Sumo", NamedTextColor.YELLOW, TextDecoration.BOLD),
+        miniMessage.deserialize("<gradient:blue:aqua><bold>Block Sumo"),
         showsInSlashPlay = true
     )
 
-    PowerupCommand.register()
-    EventCommand.register()
-    SaveLoudoutCommand.register()
-    LivesCommand.register()
-    PlatformCommand.register()
-    NoKBCommand.register()
+    val cm = MinecraftServer.getCommandManager()
+    cm.register(PowerupCommand)
+    cm.register(EventCommand)
+    cm.register(SaveLoudoutCommand)
+    cm.register(LivesCommand)
+    cm.register(PlatformCommand)
+    cm.register(NoKBCommand)
 
     Logger.info("[BlockSumo] Initialized!")
 }
