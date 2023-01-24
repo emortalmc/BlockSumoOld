@@ -17,8 +17,6 @@ class MapClearEvent : Event() {
         .append(Component.text(" the map is being cleared", NamedTextColor.YELLOW))
         .append(Component.text("!", NamedTextColor.GRAY))
         .build()
-    override val duration: Duration = Duration.ofSeconds(5)
-
 
     override fun eventStarted(game: BlockSumoGame) {
 
@@ -57,10 +55,6 @@ class MapClearEvent : Event() {
 
             TaskSchedule.millis(150)
         }
-    }
-
-    override fun eventEnded(game: BlockSumoGame) {
-
     }
 
 }

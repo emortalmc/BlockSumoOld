@@ -123,8 +123,6 @@ open class BlockSumoGame : PvpGame() {
 
     var borderSize = 40.0
 
-    var currentEvent: Event? = null
-
     private val spawnPos = Pos(0.5, 65.0, 0.5)
     override fun getSpawnPosition(player: Player, spectator: Boolean): Pos = spawnPos
 
@@ -138,7 +136,7 @@ open class BlockSumoGame : PvpGame() {
             val newTeam = Team(player.username, player.color!!.color, TeamsPacket.CollisionRule.NEVER)
             newTeam.add(player)
         }
-        player.team.updateSuffix(
+        player.team!!.updateSuffix(
             Component.text().append(Component.text(" - ", NamedTextColor.GRAY))
                 .append(Component.text(player.lives, livesColor, TextDecoration.BOLD)).build()
         )
@@ -406,9 +404,8 @@ open class BlockSumoGame : PvpGame() {
     }
 
     override fun respawn(player: Player): Unit = with(player) {
-        reset()
-
         teleport(respawnPoint).thenRun {
+            reset()
             gameMode = GameMode.SURVIVAL
 
             getAttribute(Attribute.MAX_HEALTH).baseValue = lives * 2f
@@ -572,7 +569,7 @@ open class BlockSumoGame : PvpGame() {
                 val zDir = cos(Math.toRadians((-player.position.yaw).toDouble()) - Math.PI)
                 val xDir = sin(Math.toRadians((-player.position.yaw).toDouble()) - Math.PI)
                 val x = player.position.x - xDir * 0.3
-                val y = player.position.y + 1
+                val y = player.position.y + player.eyeHeight
                 val z = player.position.z - zDir * 0.3
 
                 val bobberEntity = FishingBobber(player, this@BlockSumoGame)
@@ -819,7 +816,7 @@ open class BlockSumoGame : PvpGame() {
 
             when (powerup) {
                 "snowball" -> target.takeKnockback(e.collisionPosition)
-                "slimeball" -> target.takeKnockback(e.collisionPosition, -0.8)
+                "slimeball" -> target.takeKnockback(e.collisionPosition, -1.0)
                 "enderpearl" -> shooter.teleport(e.collisionPosition)
                 "grapplehook" -> {
                     val entity = e.entity as FishingBobber
@@ -866,11 +863,24 @@ open class BlockSumoGame : PvpGame() {
         instance!!.scheduler().buildTask {
             val randomEvent = Event.createRandomEvent()
 
-            currentEvent = randomEvent
+            instance!!.timeRate = 400
+            instance!!.timeUpdate = Duration.ofMillis(50)
+            instance!!.time = 8000
+            instance!!.scheduler().buildTask {
+                instance!!.timeRate = 0
+                instance!!.timeUpdate = null
+            }.delay(TaskSchedule.seconds(1)).schedule()
 
-            instance?.scheduler()?.buildTask {
-                currentEvent = null
-            }?.delay(randomEvent.duration)?.schedule()
+            instance!!.scheduler().buildTask {
+                instance!!.time = 16000
+                instance!!.timeRate = 80
+                instance!!.timeUpdate = Duration.ofMillis(50)
+            }.delay(TaskSchedule.seconds(10)).schedule()
+            instance!!.scheduler().buildTask {
+                instance!!.timeRate = 0
+                instance!!.timeUpdate = null
+                instance!!.time = 8000
+            }.delay(TaskSchedule.seconds(11)).schedule()
 
             randomEvent.performEvent(this@BlockSumoGame)
         }.repeat(TaskSchedule.seconds(120)).delay(TaskSchedule.seconds(120)).schedule()
@@ -1134,8 +1144,6 @@ open class BlockSumoGame : PvpGame() {
     }
 
     override fun gameWon(winningPlayers: Collection<Player>) {
-        currentEvent?.eventEnded(this)
-
         var i = 0
         instance!!.scheduler().submitTask {
             if (i > 10) {

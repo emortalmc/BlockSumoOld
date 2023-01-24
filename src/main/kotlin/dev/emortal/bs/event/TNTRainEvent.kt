@@ -20,7 +20,6 @@ class TNTRainEvent : Event() {
         .append(Component.text("the TNT rain event just started", NamedTextColor.YELLOW))
         .append(Component.text("!", NamedTextColor.GRAY))
         .build()
-    override val duration: Duration = Duration.ofSeconds(10)
 
     override fun eventStarted(game: BlockSumoGame) {
 
@@ -49,10 +48,6 @@ class TNTRainEvent : Event() {
 
             TaskSchedule.seconds(2)
         }
-    }
-
-    override fun eventEnded(game: BlockSumoGame) {
-
     }
 
 }

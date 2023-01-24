@@ -20,24 +20,15 @@ sealed class Event {
             .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
     }
 
-    var running = false
 
-    abstract val duration: Duration
     abstract val startMessage: Component
 
     fun performEvent(game: BlockSumoGame) {
-        running = true
         eventStarted(game)
 
         game.sendMessage(Component.text().append(prefix).append(startMessage))
-
-        game.instance?.scheduler()?.buildTask {
-            eventEnded(game)
-        }?.schedule()
-
     }
 
     abstract fun eventStarted(game: BlockSumoGame)
-    abstract fun eventEnded(game: BlockSumoGame)
 
 }

@@ -49,7 +49,7 @@ object Slimeball : Powerup(
         val instance = player.instance!!
 
         snowball.scheduleRemove(10, TimeUnit.SECOND)
-        snowball.setInstance(instance, player.position.add(0.0, 1.0, 0.0))
+        snowball.setInstance(instance, player.position.add(0.0, player.eyeHeight, 0.0))
 
         instance.playSound(
             Sound.sound(SoundEvent.ENTITY_SNOWBALL_THROW, Sound.Source.BLOCK, 1f, 1f),

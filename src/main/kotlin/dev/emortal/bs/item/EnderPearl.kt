@@ -39,7 +39,7 @@ object EnderPearl : Powerup(
 
         val instance = player.instance!!
 
-        pearl.setInstance(instance, player.position.add(0.0, 1.0, 0.0))
+        pearl.setInstance(instance, player.position.add(0.0, player.eyeHeight, 0.0))
 
         pearl.scheduler().submitTask {
             if (pearl.aliveTicks > 10 * MinecraftServer.TICK_PER_SECOND) {

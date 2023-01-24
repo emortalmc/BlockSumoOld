@@ -30,7 +30,7 @@ sealed class Item(
 
             var idx = 0
 
-            var r = ThreadLocalRandom.current().nextInt(totalWeight)
+            var r = ThreadLocalRandom.current().nextInt(totalWeight + 1)
             while (idx < possibleItems.size - 1) {
                 r -= possibleItems[idx].rarity.weight
                 if (r <= 0.0) break
