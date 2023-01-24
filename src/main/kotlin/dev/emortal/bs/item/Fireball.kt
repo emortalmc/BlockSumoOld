@@ -39,7 +39,7 @@ object Fireball : Powerup(
 
         val instance = player.instance!!
 
-        fireBall.setInstance(instance, player.position.add(0.0, 1.0, 0.0))
+        fireBall.setInstance(instance, player.position.add(0.0, player.eyeHeight, 0.0))
 
         player.instance!!.playSound(
             Sound.sound(SoundEvent.ENTITY_GHAST_SHOOT, Sound.Source.BLOCK, 1f, 1f),
