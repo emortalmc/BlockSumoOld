@@ -8,13 +8,12 @@ import dev.emortal.bs.game.TeamBlockSumoGame
 import dev.emortal.immortal.Immortal
 import dev.emortal.immortal.config.ConfigHelper
 import dev.emortal.immortal.game.GameManager
-import net.kyori.adventure.text.Component
-import net.kyori.adventure.text.format.NamedTextColor
-import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.minestom.server.MinecraftServer
-import org.tinylog.kotlin.Logger
+import org.slf4j.LoggerFactory
 import java.nio.file.Path
+
+private val LOGGER = LoggerFactory.getLogger(BlockSumoMain::class.java)
 
 fun main() {
     Immortal.initAsServer()
@@ -50,7 +49,7 @@ fun main() {
     cm.register(PlatformCommand)
     cm.register(NoKBCommand)
 
-    Logger.info("[BlockSumo] Initialized!")
+    LOGGER.info("[BlockSumo] Initialized!")
 }
 
 class BlockSumoMain {

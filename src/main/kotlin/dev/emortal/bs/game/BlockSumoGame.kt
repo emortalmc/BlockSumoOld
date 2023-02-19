@@ -74,8 +74,7 @@ import net.minestom.server.timer.TaskSchedule
 import net.minestom.server.utils.Direction
 import net.minestom.server.utils.chunk.ChunkUtils
 import net.minestom.server.utils.time.TimeUnit
-import org.json.XMLTokener.entity
-import org.tinylog.kotlin.Logger
+import org.slf4j.LoggerFactory
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -90,6 +89,8 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
+
+private val LOGGER = LoggerFactory.getLogger(BlockSumoGame::class.java)
 
 open class BlockSumoGame : PvpGame() {
 
@@ -1114,7 +1115,7 @@ open class BlockSumoGame : PvpGame() {
                         .mul(explosionForce)
                 }
 
-            instance!!.sendGroupedPacket(ExplosionPacket(position.x().toFloat(), position.y().toFloat(), position.z().toFloat(), explosionSize.toFloat(), ByteArray(0), 0f, 0f, 0f))
+            instance!!.sendGroupedPacket(ExplosionPacket(position.x(), position.y(), position.z(), explosionSize.toFloat(), ByteArray(0), 0f, 0f, 0f))
 
             if (breakBlocks) {
                 val batch = AbsoluteBlockBatch()
@@ -1137,7 +1138,7 @@ open class BlockSumoGame : PvpGame() {
                 batch.apply(instance!!) {}
             }
         } catch (e: NullPointerException) {
-            Logger.warn("Probably unloaded chunk error")
+            LOGGER.warn("Probably unloaded chunk error")
         }
 
 
