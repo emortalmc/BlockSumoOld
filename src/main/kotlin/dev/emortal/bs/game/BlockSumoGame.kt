@@ -959,13 +959,13 @@ open class BlockSumoGame : PvpGame() {
             )
 
             getPlayers().showFirework(
-                instance!!, spawnPos.add(0.0, 1.0, 0.0), mutableListOf(
+                instance!!, spawnPos.add(0.0, 1.0, 0.0), listOf(
                     FireworkEffect(
                         false,
                         false,
                         FireworkEffectType.SMALL_BALL,
-                        mutableListOf(Color(255, 100, 0)),
-                        mutableListOf(Color(255, 0, 255))
+                        listOf(Color(255, 100, 0)),
+                        listOf(Color(255, 0, 255))
                     )
                 )
             )
@@ -1153,7 +1153,7 @@ open class BlockSumoGame : PvpGame() {
 
             val random = ThreadLocalRandom.current()
 
-            val effects = mutableListOf(
+            val effects = listOf(
                 FireworkEffect(
                     random.nextBoolean(),
                     random.nextBoolean(),

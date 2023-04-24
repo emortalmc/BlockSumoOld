@@ -3,7 +3,6 @@ package dev.emortal.bs.item
 import dev.emortal.bs.game.BlockSumoGame
 import dev.emortal.bs.util.RaycastResultType
 import dev.emortal.bs.util.RaycastUtil
-import dev.emortal.immortal.util.asVec
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.minestom.server.coordinate.Pos
@@ -53,7 +52,7 @@ object Switcheroo : Powerup(
             ),
             Renderer.fixedLine(
                 eyePos,
-                raycast.hitPosition?.asVec() ?: eyePos.add(player.position.direction().mul(20.0))
+                Vec.fromPoint(raycast.hitPosition ?: eyePos.add(player.position.direction().mul(20.0)))
             )
         )
 
